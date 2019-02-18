@@ -1,2 +1,2 @@
-# diplomaterv
+# Diplomaterv
 Multi task reinforcement learning

@@ -222,7 +222,6 @@ class myA2C(ActorCriticRLModel):
 
         return writer
 
-
     def multi_task_learn_for_one_episode(self, runner, writer, callback=None, seed=None, log_interval=100, tb_log_name="A2C",
               reset_num_timesteps=True):
 
@@ -256,7 +255,7 @@ class myA2C(ActorCriticRLModel):
             logger.record_tabular("explained_variance", float(explained_var))
             logger.dump_tabular()
 
-            return self
+            return self.episode_reward
 
     def save(self, save_path):
         data = {

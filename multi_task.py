@@ -5,7 +5,7 @@ import utils
 
 
 class MultiTasking():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, MetaDecider, ActiveSamplingMultiTaskAgent, lam):
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
@@ -51,6 +51,7 @@ class MultiTasking():
             self.s[j].append(score)
             if len(self.s[j]) > self.n:
                 self.s[j].pop(0)
+        self.amta.save_model()
 
     def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list)
@@ -96,6 +97,7 @@ class MultiTasking():
             self.r2 = 1 - np.average(np.clip(s_min_l, 0, 1))
             self.r = self.lam * self.r1 + (1 - self.lam) * self.r2
             self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, utils.one_hot(j, self.k)], reward=self.r)
+        self.amta.save_model()
 
     def train(self):
         if self.algorithm == "A5C":

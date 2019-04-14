@@ -1,6 +1,6 @@
-from myA2C import myA2C
-from myA2C import myA2CRunner
-from multi_task_policy import MultiTaskA2CPolicy
+from MultiTaskA2C import MultitaskA2C
+from MultiTaskA2C import myA2CRunner
+from MultiTaskPolicy import MultiTaskA2CPolicy
 import local_config
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
@@ -23,7 +23,7 @@ class Agent:
             self.env[game] = env
 
     def __setup_model(self):
-        self.model = myA2C(self.policy, self.env, verbose=1)
+        self.model = MultitaskA2C(self.policy, self.env, verbose=1)
         self.writer = self.model._setup_multitask_learn(10000)
 
     def __setup_runners(self):
@@ -32,9 +32,14 @@ class Agent:
         for environment in environment_list:
             self.runners[environment] = myA2CRunner(self.env[environment], self.model, n_steps=4, gamma=0.99)
 
+    def train_for_one_episode(self, game):
+        runner = self.runners[game]
+        score = self.model.multi_task_learn_for_one_episode(runner, self.writer)
+        return score
+
     def play(self, model_path, game, max_number_of_games, show_render=False):
         number_of_games = 0
-        model = myA2C.load(model_path)
+        model = MultitaskA2C.load(model_path)
         env = gym.make(game)
         obs = env.reset()
         while number_of_games < max_number_of_games:
@@ -58,7 +63,3 @@ class Agent:
         except:
             print("Error at saving the model")
 
-    def train_for_one_episode(self, game):
-        runner = self.runners[game]
-        score = self.model.multi_task_learn_for_one_episode(runner, self.writer)
-        return score

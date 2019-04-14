@@ -1,7 +1,13 @@
-from stable_baselines.common.policies import ActorCriticPolicy
-import tensorflow as tf
-from stable_baselines.a2c.utils import conv, conv_to_fc, linear
+from abc import ABC
+
 import numpy as np
+import tensorflow as tf
+from gym.spaces import Discrete
+
+from stable_baselines.a2c.utils import conv, linear, conv_to_fc
+from distributions import make_proba_dist_type, CategoricalProbabilityDistribution, \
+    MultiCategoricalProbabilityDistribution, DiagGaussianProbabilityDistribution, BernoulliProbabilityDistribution
+from stable_baselines.common.input import observation_input
 
 
 def cnn_from_paper(scaled_images, **kwargs):

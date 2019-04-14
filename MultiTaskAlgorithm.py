@@ -21,7 +21,7 @@ class MultiTasking():
         assert isinstance(SetOfTasks, list)
         self.T = SetOfTasks
         self.k = len(self.T)  # Number of tasks
-        assert isinstance(TargetPerformances, list)
+        assert isinstance(TargetPerformances, dict)
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
         assert isinstance(NumberOfEpisodesForEstimating, int)
         self.n = NumberOfEpisodesForEstimating  # Number of episodes which are used for estimating current average performance in any task Ti

@@ -7,7 +7,7 @@ import os
 import warnings
 import cloudpickle
 
-from MultiTaskPolicy import ActorCriticPolicy
+from MultiTaskPolicy import MultiTaskActorCriticPolicy
 
 from stable_baselines.common.policies import LstmPolicy, get_policy_from_name
 from stable_baselines.common.vec_env import VecEnv
@@ -46,7 +46,7 @@ class BaseMultitaskRLModel(ABC):
         self.policy_kwargs = {} if policy_kwargs is None else policy_kwargs
         self.observation_space = None
         self.action_space_dict = {}
-        self.n_envs = {}
+        self.n_envs = None
         self._vectorize_action = False
         self.num_timesteps = 0
 
@@ -59,7 +59,8 @@ class BaseMultitaskRLModel(ABC):
             if requires_vec_env:
                 for key, value in self.env_dict.items():
                     if isinstance(self.env_dict[key], VecEnv):
-                        self.n_envs[key] = self.env_dict[key].num_envs
+                        self.n_envs = self.env_dict[key].num_envs
+                        break
                     else:
                         raise ValueError("Error: the model requires a vectorized environment, please use a VecEnv wrapper.")
             else:
@@ -71,7 +72,7 @@ class BaseMultitaskRLModel(ABC):
                         else:
                             raise ValueError("Error: the model requires a non vectorized environment or a single vectorized"
                                              " environment.")
-                    self.n_envs[key] = 1
+                    self.n_envs = 1
 
     def get_env(self):
         """
@@ -328,7 +329,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     :param requires_vec_env: (bool) Does this model require a vectorized environment
     """
 
-    def __init__(self, policy, env_dict, _init_setup_model, verbose=0, policy_base=ActorCriticPolicy,
+    def __init__(self, policy, env_dict, _init_setup_model, verbose=0, policy_base=MultiTaskActorCriticPolicy,
                  requires_vec_env=False, policy_kwargs=None):
         super(ActorCriticMultitaskRLModel, self).__init__(policy, env_dict, verbose=verbose, requires_vec_env=requires_vec_env,
                                                           policy_base=policy_base, policy_kwargs=policy_kwargs)
@@ -511,7 +512,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.full_tensorboard_log = full_tensorboard_log
 
         self.graph = None
-        self.sess = None
+        # self.sess = None
         self.learning_rate_ph = None
         self.n_batch = None
         self.actions_ph = None
@@ -524,10 +525,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.apply_backprop = None
         self.train_model = None
         self.step_model = None
-        self.step = None
-        self.proba_step = None
+        # self.step = None
+        # self.proba_step = None
         self.value = None
-        self.initial_state = None
+        # self.initial_state = None
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
@@ -539,7 +540,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     def setup_model(self):
         with SetVerbosity(self.verbose):
 
-            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
+            assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
                                                                "instance of common.policies.ActorCriticPolicy."
 
             self.graph = tf.Graph()
@@ -554,17 +555,19 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     n_batch_step = self.n_envs
                     n_batch_train = self.n_envs * self.n_steps
 
-                step_model = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
+                step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
                                          n_batch_step, reuse=False, **self.policy_kwargs)
-
+                #TODO a step model inicializálás kész, még az observation space változhat.
                 with tf.variable_scope("train_model", reuse=True,
                                        custom_getter=tf_util.outer_scope_getter("train_model")):
-                    train_model = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs,
+                    train_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs,
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
 
+                self.actions_ph_dict = {}
                 with tf.variable_scope("loss", reuse=False):
-                    self.actions_ph = train_model.pdtype.sample_placeholder([None], name="action_ph")
-                    self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")
+                    for key in self.env_dict.keys():
+                        self.actions_ph_dict[key] = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
+                    self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph") # advantages
                     self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 

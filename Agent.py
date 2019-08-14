@@ -10,7 +10,7 @@ import datetime
 class Agent:
     def __init__(self, listOfGames):
         self.listOfGames = listOfGames
-        self.env = {}
+        self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
         self.__setup_environments()
         self.__setup_model()
@@ -20,21 +20,22 @@ class Agent:
         n_cpu = local_config.number_of_cpus
         for game in self.listOfGames:
             env = SubprocVecEnv([lambda: gym.make(game) for i in range(n_cpu)])
-            self.env[game] = env
+            self.sub_proc_environments[game] = env
 
     def __setup_model(self):
-        self.model = MultitaskA2C(self.policy, self.env, verbose=1)
-        self.writer = self.model._setup_multitask_learn(10000)
+        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1)
+        self.tbw = self.model._setup_multitask_learn(10000)
+        self.writer = self.tbw.enter()
 
     def __setup_runners(self):
-        environment_list = list(self.env)
+        environment_list = list(self.sub_proc_environments)
         self.runners = {}
         for environment in environment_list:
-            self.runners[environment] = myA2CRunner(self.env[environment], self.model, n_steps=4, gamma=0.99)
+            self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment], self.model, n_steps=4, gamma=0.99)
 
     def train_for_one_episode(self, game):
         runner = self.runners[game]
-        score = self.model.multi_task_learn_for_one_episode(runner, self.writer)
+        score = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
         return score
 
     def play(self, model_path, game, max_number_of_games, show_render=False):
@@ -43,7 +44,7 @@ class Agent:
         env = gym.make(game)
         obs = env.reset()
         while number_of_games < max_number_of_games:
-            action, states = model.predict(obs)
+            action, states = model.predict(game, obs)
             obs, rewards, done, info = env.step(action)
             if done:
                 obs = env.reset()
@@ -53,6 +54,7 @@ class Agent:
                 env.render()
 
     def save_model(self):
+        self.tbw.exit()
         now = str(datetime.datetime.now())[:16]
         now = now.replace(' ', '_')
         now = now.replace(':', '_')

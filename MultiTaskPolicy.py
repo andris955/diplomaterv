@@ -4,8 +4,7 @@ import numpy as np
 import tensorflow as tf
 from gym.spaces import Discrete
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc
-from distributions import make_proba_dist_type, CategoricalProbabilityDistribution, \
-    MultiCategoricalProbabilityDistribution, DiagGaussianProbabilityDistribution, BernoulliProbabilityDistribution
+from distributions import make_proba_dist_type, CategoricalProbabilityDistribution
 from stable_baselines.common.input import observation_input
 
 
@@ -58,10 +57,10 @@ class BaseMultiTaskPolicy(ABC):
             else:
                 self.obs_ph, self.processed_obs = obs_phs
 
-            self.action_ph = {}
             if add_action_ph:
                 for key, value in ac_space_dict.items():
-                    self.action_ph[key] = tf.placeholder(dtype=ac_space_dict[key].dtype, shape=(None,) + ac_space_dict[key].shape, name="action_ph")
+                    self.action_ph = tf.placeholder(dtype=ac_space_dict[key].dtype, shape=(None,) + ac_space_dict[key].shape, name="action_ph")
+                    break
         self.sess = sess
         self.reuse = reuse
         self.ob_space = ob_space
@@ -85,7 +84,7 @@ class BaseMultiTaskPolicy(ABC):
         if feature_extraction == 'mlp' and len(kwargs) > 0:
             raise ValueError("Unknown keywords for policy: {}".format(kwargs))
 
-    def step(self, obs, state=None, mask=None):
+    def step(self, game, obs, state=None, mask=None):
         """
         Returns the policy for a single step
 
@@ -96,7 +95,7 @@ class BaseMultiTaskPolicy(ABC):
         """
         raise NotImplementedError
 
-    def proba_step(self, obs, state=None, mask=None):
+    def proba_step(self, game, obs, state=None, mask=None):
         """
         Returns the action probability for a single step
 
@@ -147,7 +146,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.policy_proba = {}
         self._value = {}
         for key in self.ac_space_dict.keys():
-            with tf.variable_scope(key + "_output", reuse=True):
+            with tf.variable_scope(key + "_output", reuse=False):
                 assert self.policy_dict is not {} and self.proba_distribution_dict is not {} and self.value_fn_dict is not {}
                 self.action[key] = self.proba_distribution_dict[key].sample()
                 self.deterministic_action[key] = self.proba_distribution_dict[key].mode()
@@ -165,7 +164,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
                     self.policy_proba[key] = []  # it will return nothing, as it is not implemented
                 self._value[key] = self.value_fn_dict[key][:, 0]
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, game, obs, state=None, mask=None, deterministic=False):
         """
         Returns the policy for a single step
 
@@ -177,7 +176,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         """
         raise NotImplementedError
 
-    def proba_step(self, obs, state=None, mask=None):
+    def proba_step(self, game, obs, state=None, mask=None):
         """
         Returns the action probability for a single step
 
@@ -188,7 +187,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         """
         raise NotImplementedError
 
-    def value(self, obs, state=None, mask=None):
+    def value(self, game, obs, state=None, mask=None):
         """
         Returns the value for a single step
 
@@ -206,28 +205,27 @@ class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
         with tf.variable_scope("model", reuse=reuse):
             pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
 
-            for key, value in self.pdtype_dict.items():
+            for key in self.pdtype_dict.keys():
                 self.value_fn_dict[key] = linear(vf_latent, key + '_vf', 1)
                 proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(pi_latent, vf_latent, init_scale=0.01)
-                self.proba_distribution_dict[key] = proba_distribution
-                self.policy_dict[key] = policy
-                self.q_value_dict[key] = q_value
-
+                self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy
+                self.policy_dict[key] = policy # egy linear layer
+                self.q_value_dict[key] = q_value # linear layer
 
         self.initial_state = None
         self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, game, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            action, value, neglogp = self.sess.run([self.deterministic_action, self._value, self.neglogp],
+            action, value, neglogp = self.sess.run([self.deterministic_action[game], self._value[game], self.neglogp[game]],
                                                    {self.obs_ph: obs})
         else:
-            action, value, neglogp = self.sess.run([self.action, self._value, self.neglogp],
+            action, value, neglogp = self.sess.run([self.action[game], self._value[game], self.neglogp[game]],
                                                    {self.obs_ph: obs})
-        return action, value, self.initial_state, neglogp
+        return action, value, neglogp
 
-    def proba_step(self, obs, state=None, mask=None):
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs})
+    def proba_step(self, game, obs, state=None, mask=None):
+        return self.sess.run(self.policy_proba[game], {self.obs_ph: obs})
 
-    def value(self, obs, state=None, mask=None):
-        return self.sess.run(self._value, {self.obs_ph: obs})
+    def value(self, game, obs, state=None, mask=None):
+        return self.sess.run(self._value[game], {self.obs_ph: obs})

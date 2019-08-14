@@ -74,7 +74,7 @@ class BaseMultitaskRLModel(ABC):
                                              " environment.")
                     self.n_envs = 1
 
-    def get_env(self):
+    def get_envs(self):
         """
         returns the current environment (can be None if not defined)
 
@@ -162,7 +162,7 @@ class BaseMultitaskRLModel(ABC):
             set_global_seeds(seed)
 
     @abstractmethod
-    def predict(self, observation, game, state=None, mask=None, deterministic=False):
+    def predict(self, game, observation, state=None, mask=None, deterministic=False):
         """
         Get the model's action from an observation
 
@@ -175,7 +175,7 @@ class BaseMultitaskRLModel(ABC):
         pass
 
     @abstractmethod
-    def action_probability(self, observation, state=None, mask=None, actions=None):
+    def action_probability(self, game, observation, state=None, mask=None, actions=None):
         """
         If ``actions`` is ``None``, then get the model's action probability distribution from a given observation
 
@@ -317,6 +317,8 @@ class BaseMultitaskRLModel(ABC):
                              .format(observation_space))
 
 
+#--------------------------------------------------------------------------------------------------------------------------------------------------
+
 class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     """
     The base class for Actor critic model
@@ -344,13 +346,13 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     def setup_model(self):
         pass
 
-    def predict(self, observation, game, state=None, mask_dict=None, deterministic=False):
+    def predict(self, game, observation, state=None, mask_dict=None, deterministic=False):
         if state is None:
             state = self.initial_state
         if mask_dict is None:
             mask_dict = {}
-            for key, _ in self.env_dict:
-                mask_dict[key] = [False for _ in range(self.n_envs[key])]
+            for key in self.env_dict.keys():
+                mask_dict[key] = [False for _ in range(self.n_envs)]
 
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
@@ -364,13 +366,14 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             exit()
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions, _, states, _ = self.step(observation, state, mask_dict, deterministic=deterministic)
+        actions, _, states, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
 
         clipped_actions = actions
         # Clip the actions to avoid out of bound error
         if isinstance(self.action_space_dict[game], gym.spaces.Box):
             clipped_actions = np.clip(actions, self.action_space_dict[game].low, self.action_space_dict[game].high)
 
+        #TODO ez mi?
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
@@ -378,34 +381,34 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         return clipped_actions, states
 
-    def action_probability(self, observation, state=None, mask_dict=None, actions=None):
+    def action_probability(self, game, observation, state=None, mask_dict=None, actions=None):
         if state is None:
             state = self.initial_state
         if mask_dict is None:
             mask_dict = {}
-            for key, _ in self.env_dict:
-                mask_dict[key] = [False for _ in range(self.n_envs[key])]
+            for key in self.env_dict.key():
+                mask_dict[key] = [False for _ in range(self.n_envs)]
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions_proba = self.proba_step(observation, state, mask_dict)
+        actions_proba = self.proba_step(game, observation, state, mask_dict)
 
         if len(actions_proba) == 0:  # empty list means not implemented
             warnings.warn("Warning: action probability is not implemented for {} action space. Returning None."
-                          .format(type(self.action_space).__name__))
+                          .format(type(self.action_space_dict[game]).__name__))
             return None
 
         if actions is not None:  # comparing the action distribution, to given actions
             actions = np.array([actions])
-            if isinstance(self.action_space, gym.spaces.Discrete):
+            if isinstance(self.action_space_dict[game], gym.spaces.Discrete):
                 actions = actions.reshape((-1,))
                 assert observation.shape[0] == actions.shape[0], \
                     "Error: batch sizes differ for actions and observations."
                 actions_proba = actions_proba[np.arange(actions.shape[0]), actions]
 
-            elif isinstance(self.action_space, gym.spaces.MultiDiscrete):
-                actions = actions.reshape((-1, len(self.action_space.nvec)))
+            elif isinstance(self.action_space_dict[game], gym.spaces.MultiDiscrete):
+                actions = actions.reshape((-1, len(self.action_space_dict[game].nvec)))
                 assert observation.shape[0] == actions.shape[0], \
                     "Error: batch sizes differ for actions and observations."
                 # Discrete action probability, over multiple categories
@@ -413,20 +416,20 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
                 actions_proba = np.prod([proba[np.arange(act.shape[0]), act]
                                          for proba, act in zip(actions_proba, actions)], axis=0)
 
-            elif isinstance(self.action_space, gym.spaces.MultiBinary):
-                actions = actions.reshape((-1, self.action_space.n))
+            elif isinstance(self.action_space_dict[game], gym.spaces.MultiBinary):
+                actions = actions.reshape((-1, self.action_space_dict[game].n))
                 assert observation.shape[0] == actions.shape[0], \
                     "Error: batch sizes differ for actions and observations."
                 # Bernoulli action probability, for every action
                 actions_proba = np.prod(actions_proba * actions + (1 - actions_proba) * (1 - actions), axis=1)
 
-            elif isinstance(self.action_space, gym.spaces.Box):
+            elif isinstance(self.action_space_dict[game], gym.spaces.Box):
                 warnings.warn("The probabilty of taken a given action is exactly zero for a continuous distribution."
                               "See http://blog.christianperone.com/2019/01/ for a good explanation")
                 actions_proba = np.zeros((observation.shape[0], 1), dtype=np.float32)
             else:
                 warnings.warn("Warning: action_probability not implemented for {} actions space. Returning None."
-                              .format(type(self.action_space).__name__))
+                              .format(type(self.action_space_dict[game]).__name__))
                 return None
             # normalize action proba shape for the different gym spaces
             actions_proba = actions_proba.reshape((-1, 1))
@@ -464,6 +467,8 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         return model
 
+
+#---------------------------------------------------------------------------------------------------------------------------------------
 
 class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
@@ -518,9 +523,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.actions_ph = None
         self.advs_ph = None
         self.rewards_ph = None
-        self.pg_loss = None
-        self.vf_loss = None
-        self.entropy = None
+        self.pg_loss = {}
+        self.vf_loss = {}
+        self.entropy = {}
         self.params = None
         self.apply_backprop = None
         self.train_model = None
@@ -528,7 +533,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         # self.step = None
         # self.proba_step = None
         self.value = None
-        # self.initial_state = None
+        # self.initial_state = None #TODO ez is
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
@@ -563,30 +568,33 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     train_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs,
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
 
-                self.actions_ph_dict = {}
                 with tf.variable_scope("loss", reuse=False):
-                    for key in self.env_dict.keys():
-                        self.actions_ph_dict[key] = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
+                    # for key in self.env_dict.keys():
+                    self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph") #TODO leellenőrizni, h minnden ugyanolyan típusú distribution-e
+                    # self.actions_ph = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
                     self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph") # advantages
                     self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
-                    neglogpac = train_model.proba_distribution.neglogp(self.actions_ph)
-                    self.entropy = tf.reduce_mean(train_model.proba_distribution.entropy())
-                    self.pg_loss = tf.reduce_mean(self.advs_ph * neglogpac)
-                    self.vf_loss = mse(tf.squeeze(train_model.value_fn), self.rewards_ph)
-                    loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
+                    neglogpac = {}
+                    loss = {}
+                    for key in self.env_dict.keys():
+                        neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph)
+                        self.entropy[key] = tf.reduce_mean(train_model.proba_distribution_dict[key].entropy())
+                        self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key]) # policy gradient loss
+                        self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
+                        loss[key] = self.pg_loss[key] - self.entropy[key] * self.ent_coef + self.vf_loss[key] * self.vf_coef
 
-                    tf.summary.scalar('entropy_loss', self.entropy)
-                    tf.summary.scalar('policy_gradient_loss', self.pg_loss)
-                    tf.summary.scalar('value_function_loss', self.vf_loss)
-                    tf.summary.scalar('loss', loss)
+                        tf.summary.scalar(key + '_entropy_loss', self.entropy[key])
+                        tf.summary.scalar(key + '_policy_gradient_loss', self.pg_loss[key])
+                        tf.summary.scalar(key + '_value_function_loss', self.vf_loss[key])
+                        tf.summary.scalar(key + '_loss', loss[key])
 
-                    self.params = find_trainable_variables("model")
-                    grads = tf.gradients(loss, self.params)
-                    if self.max_grad_norm is not None:
-                        grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
-                    grads = list(zip(grads, self.params))
+                    # self.params = find_trainable_variables("model")
+                    # grads = tf.gradients(loss, self.params)
+                    # if self.max_grad_norm is not None:
+                    #     grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
+                    # grads = list(zip(grads, self.params))
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
@@ -601,9 +609,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         else:
                             tf.summary.histogram('observation', train_model.obs_ph)
 
-                trainer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha,
+                optimizers = {}
+                self.apply_backprop = {}
+                for key in self.env_dict.keys():
+                    optimizers[key] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha,
                                                     epsilon=self.epsilon)
-                self.apply_backprop = trainer.apply_gradients(grads)
+                    self.apply_backprop[key] = optimizers[key].minimize(loss[key])
 
                 self.train_model = train_model
                 self.step_model = step_model
@@ -615,10 +626,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, obs, states, rewards, masks, actions, values, update, writer=None):
+    def _train_step(self, game, obs, states, rewards, masks, actions, values, update, writer=None):
         """
         applies a training step to the model
 
+        :param game: (str) Name of the game
         :param obs: ([float]) The input observations
         :param states: ([float]) The states (used for recurrent policies)
         :param rewards: ([float]) The rewards from the environment
@@ -647,17 +659,17 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop],
+                    [self.summary, self.pg_loss[game], self.vf_loss[game], self.entropy[game], self.apply_backprop[game]],
                     td_map, options=run_options, run_metadata=run_metadata)
                 writer.add_run_metadata(run_metadata, 'step%d' % (update * (self.n_batch + 1)))
             else:
                 summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
+                    [self.summary[game], self.pg_loss[game], self.vf_loss[game], self.entropy[game], self.apply_backprop[game]], td_map)
             writer.add_summary(summary, update * (self.n_batch + 1))
 
         else:
             policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
+                [self.pg_loss[game], self.vf_loss[game], self.entropy[game], self.apply_backprop[game]], td_map)
 
         return policy_loss, value_loss, policy_entropy
 
@@ -665,7 +677,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         new_tb_log = self._init_num_timesteps(True)
         SetVerbosity(self.verbose)
         tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
-        writer = tbw.enter()
+        _ = tbw.enter()
 
         self._setup_learn(seed)
 
@@ -673,15 +685,15 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                                                 schedule=self.lr_schedule)
         self.episode_reward = np.zeros((self.n_envs,))
 
-        return writer
+        return tbw
 
-    def multi_task_learn_for_one_episode(self, runner, writer, callback=None, seed=None, log_interval=100, tb_log_name="A2C",
+    def multi_task_learn_for_one_episode(self, game, runner, writer, callback=None, seed=None, log_interval=100, tb_log_name="A2C",
                                          reset_num_timesteps=True):
 
         t_start = time.time()
         # true_reward is the reward without discount
         obs, states, rewards, masks, actions, values, true_reward = runner.run()
-        _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values,
+        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values,
                                                          self.num_timesteps // (self.n_batch + 1), writer)
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
@@ -724,7 +736,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "verbose": self.verbose,
             "policy": self.policy,
             "observation_space": self.observation_space,
-            "action_space": self.action_space,
+            "action_space": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
@@ -736,7 +748,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
 
 class myA2CRunner(AbstractEnvRunner):
-    def __init__(self, env, model, n_steps=5, gamma=0.99):
+    def __init__(self, env_name, env, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
 
@@ -747,6 +759,7 @@ class myA2CRunner(AbstractEnvRunner):
         """
         super(myA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
+        self.env_name = env_name
 
     def run(self):
         """
@@ -758,7 +771,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
         mb_states = self.states
         for _ in range(self.n_steps):
-            actions, values, states, _ = self.model.step(self.env.action_space, self.obs, self.states, self.dones)
+            actions, values, _ = self.model.step(self.env_name, self.obs) #TODO ez rossz
             if isinstance(self.env.action_space, gym.spaces.Discrete):
                 actions = np.clip(actions, 0, self.env.action_space.n)
             mb_obs.append(np.copy(self.obs))
@@ -767,7 +780,6 @@ class myA2CRunner(AbstractEnvRunner):
             mb_dones.append(self.dones)
 
             obs, rewards, dones, _ = self.env.step(actions)
-            self.states = states
             self.dones = dones
             self.obs = obs
             mb_rewards.append(rewards)
@@ -782,7 +794,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_masks = mb_dones[:, :-1]
         mb_dones = mb_dones[:, 1:]
         true_rewards = np.copy(mb_rewards)
-        last_values = self.model.value(self.obs, self.states, self.dones).tolist()
+        last_values = self.model.value(self.env_name, self.obs).tolist()
         # discount/bootstrap off value fn
         for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
             rewards = rewards.tolist()

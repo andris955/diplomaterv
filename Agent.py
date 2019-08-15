@@ -23,14 +23,13 @@ class Agent:
             self.sub_proc_environments[game] = env
 
     def __setup_model(self):
-        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1)
+        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="/home/andris955/Documents/Dipterv/diplomaterv/data/logs", full_tensorboard_log=True, n_steps=4)
         self.tbw = self.model._setup_multitask_learn(10000)
         self.writer = self.tbw.enter()
 
     def __setup_runners(self):
-        environment_list = list(self.sub_proc_environments)
         self.runners = {}
-        for environment in environment_list:
+        for environment in self.listOfGames:
             self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment], self.model, n_steps=4, gamma=0.99)
 
     def train_for_one_episode(self, game):

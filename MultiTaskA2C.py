@@ -497,7 +497,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
+    def __init__(self, policy, env_dict, gamma=0.99, n_steps=4, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -664,7 +664,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 writer.add_run_metadata(run_metadata, 'step%d' % (update * (self.n_batch + 1)))
             else:
                 summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary[game], self.pg_loss[game], self.vf_loss[game], self.entropy[game], self.apply_backprop[game]], td_map)
+                    [self.summary, self.pg_loss[game], self.vf_loss[game], self.entropy[game], self.apply_backprop[game]], td_map)
             writer.add_summary(summary, update * (self.n_batch + 1))
 
         else:
@@ -677,7 +677,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         new_tb_log = self._init_num_timesteps(True)
         SetVerbosity(self.verbose)
         tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
-        _ = tbw.enter()
 
         self._setup_learn(seed)
 

@@ -373,7 +373,6 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         if isinstance(self.action_space_dict[game], gym.spaces.Box):
             clipped_actions = np.clip(actions, self.action_space_dict[game].low, self.action_space_dict[game].high)
 
-        #TODO ez mi?
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
@@ -533,7 +532,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         # self.step = None
         # self.proba_step = None
         self.value = None
-        # self.initial_state = None #TODO ez is
+        # self.initial_state = None
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
@@ -562,7 +561,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
                                          n_batch_step, reuse=False, **self.policy_kwargs)
-                #TODO a step model inicializálás kész, még az observation space változhat.
                 with tf.variable_scope("train_model", reuse=True,
                                        custom_getter=tf_util.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs,
@@ -770,7 +768,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
         mb_states = self.states
         for _ in range(self.n_steps):
-            actions, values, _ = self.model.step(self.env_name, self.obs) #TODO ez rossz
+            actions, values, _ = self.model.step(self.env_name, self.obs)
             if isinstance(self.env.action_space, gym.spaces.Discrete):
                 actions = np.clip(actions, 0, self.env.action_space.n)
             mb_obs.append(np.copy(self.obs))

@@ -7,6 +7,7 @@ from stable_baselines.common.vec_env import SubprocVecEnv
 import os
 import datetime
 
+
 class Agent:
     def __init__(self, listOfGames):
         self.listOfGames = listOfGames

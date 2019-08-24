@@ -146,7 +146,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.policy_proba = {}
         self._value = {}
         for key in self.ac_space_dict.keys():
-            with tf.variable_scope(key + "_output", reuse=False):
+            with tf.variable_scope(key + "_output", reuse=self.reuse):
                 assert self.policy_dict is not {} and self.proba_distribution_dict is not {} and self.value_fn_dict is not {}
                 self.action[key] = self.proba_distribution_dict[key].sample()
                 self.deterministic_action[key] = self.proba_distribution_dict[key].mode()
@@ -202,10 +202,11 @@ class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, cnn_extractor=cnn_from_paper, **kwargs):
         super(MultiTaskA2CPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=True)
 
-        with tf.variable_scope("model", reuse=reuse):
+        with tf.variable_scope("shared_model", reuse=reuse):
             pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
 
-            for key in self.pdtype_dict.keys():
+        for key in self.pdtype_dict.keys():
+            with tf.variable_scope(key + "_model", reuse=reuse):
                 self.value_fn_dict[key] = linear(vf_latent, key + '_vf', 1)
                 proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(pi_latent, vf_latent, init_scale=0.01)
                 self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy

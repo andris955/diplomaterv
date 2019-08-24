@@ -1,8 +1,7 @@
 import global_config
 import local_config
 import numpy as np
-import utils
-
+from utils import one_hot
 
 class MultiTasking():
     def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, lam=None, MetaDecider=None):
@@ -46,9 +45,9 @@ class MultiTasking():
                     self.a[i] = sum(self.s[i])/self.n
                     self.m[i] = (self.ta[i] - self.a[i]) / (self.ta[i] * self.tau)
                     self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
-            #j = self.p.index(max(self.p))
-            j = np.random.randint(2) #TODO ez rossz
-            print(self.T[j])
+            # j = self.p.index(max(self.p))
+            j = np.random.randint(self.k) #TODO ez rossz
+            # print(self.T[j])
             score = self.amta.train_for_one_episode(self.T[j])
             self.s[j].append(score)
             if len(self.s[j]) > self.n:
@@ -98,7 +97,7 @@ class MultiTasking():
             self.r1 = 1 - self.s_avg[j] / self.c[j]
             self.r2 = 1 - np.average(np.clip(s_min_l, 0, 1))
             self.r = self.lam * self.r1 + (1 - self.lam) * self.r2
-            self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, utils.one_hot(j, self.k)], reward=self.r)
+            self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, one_hot(j, self.k)], reward=self.r)
         self.amta.save_model()
 
     def train(self):

@@ -17,10 +17,10 @@ from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, tf_util, SetVerbosity
 from stable_baselines.common.runners import AbstractEnvRunner
-from stable_baselines.a2c.utils import discount_with_dones, Scheduler, find_trainable_variables, mse, \
-    total_episode_reward_logger
-
+from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse
 from TensorboardWriter import TensorboardWriter
+
+import utils
 
 
 class BaseMultitaskRLModel(ABC):
@@ -497,7 +497,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
 
     def __init__(self, policy, env_dict, gamma=0.99, n_steps=4, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, tensorboard_log=None,
+                 learning_rate=7e-5, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
         super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, verbose=verbose, requires_vec_env=True,
@@ -536,10 +536,26 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
+        self.updates = None
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
             self.setup_model()
+
+    def _setup_multitask_learn(self, number_of_steps, seed=None):
+        new_tb_log = self._init_num_timesteps(True)
+        SetVerbosity(self.verbose)
+        tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
+
+        self._setup_learn(seed)
+
+        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=number_of_steps,
+                                                schedule=self.lr_schedule)
+        self.episode_reward = {}
+        for key in self.env_dict.keys():
+            self.episode_reward[key] = np.zeros((self.n_envs,))
+
+        return tbw
 
     def setup_model(self):
         with SetVerbosity(self.verbose):
@@ -555,14 +571,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 n_batch_step = None
                 n_batch_train = None
-                if issubclass(self.policy, LstmPolicy):
-                    n_batch_step = self.n_envs
-                    n_batch_train = self.n_envs * self.n_steps
 
                 step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
                                          n_batch_step, reuse=False, **self.policy_kwargs)
-                with tf.variable_scope("train_model", reuse=True,
-                                       custom_getter=tf_util.outer_scope_getter("train_model")):
+
+                with tf.variable_scope("train_model", reuse=True, custom_getter=tf_util.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs,
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
 
@@ -575,18 +588,18 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
                     neglogpac = {}
-                    loss = {}
+                    losses = {}
                     for key in self.env_dict.keys():
                         neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph)
                         self.entropy[key] = tf.reduce_mean(train_model.proba_distribution_dict[key].entropy())
                         self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key]) # policy gradient loss
                         self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
-                        loss[key] = self.pg_loss[key] - self.entropy[key] * self.ent_coef + self.vf_loss[key] * self.vf_coef
+                        losses[key] = self.pg_loss[key] - self.entropy[key] * self.ent_coef + self.vf_loss[key] * self.vf_coef
 
                         tf.summary.scalar(key + '_entropy_loss', self.entropy[key])
                         tf.summary.scalar(key + '_policy_gradient_loss', self.pg_loss[key])
                         tf.summary.scalar(key + '_value_function_loss', self.vf_loss[key])
-                        tf.summary.scalar(key + '_loss', loss[key])
+                        tf.summary.scalar(key + '_loss', losses[key])
 
                     # self.params = find_trainable_variables("model")
                     # grads = tf.gradients(loss, self.params)
@@ -604,15 +617,23 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         tf.summary.histogram('advantage', self.advs_ph)
                         if tf_util.is_image(self.observation_space):
                             tf.summary.image('observation', train_model.obs_ph)
+                            pass
                         else:
                             tf.summary.histogram('observation', train_model.obs_ph)
 
                 optimizers = {}
+                grads_and_vars = {}
                 self.apply_backprop = {}
                 for key in self.env_dict.keys():
-                    optimizers[key] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha,
-                                                    epsilon=self.epsilon)
-                    self.apply_backprop[key] = optimizers[key].minimize(loss[key])
+                    optimizers[key] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
+                    # self.apply_backprop[key] = optimizers[key].minimize(losses[key])
+                    grads_and_vars[key] = optimizers[key].compute_gradients(losses[key])
+                    if self.max_grad_norm is not None:
+                        grads = [grad for grad, var in grads_and_vars[key]]
+                        vars = [var for grad, var in grads_and_vars[key]]
+                        clipped_grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
+                        grads_and_vars[key] = list(zip(grads, vars))
+                    self.apply_backprop[key] = optimizers[key].apply_gradients(grads_and_vars[key])
 
                 self.train_model = train_model
                 self.step_model = step_model
@@ -639,7 +660,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: (float, float, float) policy loss, value loss, policy entropy
         """
-        advs = rewards - values
+        advs = rewards - values #TODO átnézni
         cur_lr = None
         for _ in range(len(obs)):
             cur_lr = self.learning_rate_schedule.value()
@@ -671,32 +692,19 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         return policy_loss, value_loss, policy_entropy
 
-    def _setup_multitask_learn(self, number_of_steps, seed=None):
-        new_tb_log = self._init_num_timesteps(True)
-        SetVerbosity(self.verbose)
-        tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
-
-        self._setup_learn(seed)
-
-        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=number_of_steps,
-                                                schedule=self.lr_schedule)
-        self.episode_reward = np.zeros((self.n_envs,))
-
-        return tbw
-
     def multi_task_learn_for_one_episode(self, game, runner, writer, callback=None, seed=None, log_interval=100, tb_log_name="A2C",
                                          reset_num_timesteps=True):
 
         t_start = time.time()
         # true_reward is the reward without discount
+        self.updates = self.num_timesteps // (self.n_batch + 1)
         obs, states, rewards, masks, actions, values, true_reward = runner.run()
-        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values,
-                                                         self.num_timesteps // (self.n_batch + 1), writer)
+        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer) #TODO writer
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
         if writer is not None:
-            self.episode_reward = total_episode_reward_logger(self.episode_reward,
+            self.episode_reward[game] = utils.total_episode_reward_logger(game, self.episode_reward[game],
                                                               true_reward.reshape((self.n_envs, self.n_steps)),
                                                               masks.reshape((self.n_envs, self.n_steps)),
                                                               writer, self.num_timesteps)
@@ -709,13 +717,15 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             if callback(locals(), globals()) is False:
                 return self
 
-        explained_var = explained_variance(values, rewards)
-        logger.record_tabular("total_timesteps", self.num_timesteps)
-        logger.record_tabular("fps", fps)
-        logger.record_tabular("policy_entropy", float(policy_entropy))
-        logger.record_tabular("value_loss", float(value_loss))
-        logger.record_tabular("explained_variance", float(explained_var))
-        logger.dump_tabular()
+        if self.verbose >= 1 and (self.updates % log_interval == 0):
+            explained_var = explained_variance(values, rewards)
+            logger.record_tabular("updates", self.updates)
+            logger.record_tabular("total_timesteps", self.num_timesteps)
+            logger.record_tabular("fps", fps)
+            logger.record_tabular("policy_entropy", float(policy_entropy))
+            logger.record_tabular("value_loss", float(value_loss))
+            logger.record_tabular("explained_variance", float(explained_var))
+            logger.dump_tabular()
 
         return self.episode_reward
 
@@ -768,7 +778,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
         mb_states = self.states
         for _ in range(self.n_steps):
-            actions, values, _ = self.model.step(self.env_name, self.obs)
+            actions, values, _ = self.model.step(self.env_name, self.obs) #TODO lehet, hogy amikor envet vált akkor a régi env képét kapja meg.
             if isinstance(self.env.action_space, gym.spaces.Discrete):
                 actions = np.clip(actions, 0, self.env.action_space.n)
             mb_obs.append(np.copy(self.obs))

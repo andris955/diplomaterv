@@ -24,7 +24,7 @@ class Agent:
             self.sub_proc_environments[game] = env
 
     def __setup_model(self):
-        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="/home/andris955/Documents/Dipterv/diplomaterv/data/logs", full_tensorboard_log=True, n_steps=4)
+        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="./data/logs", full_tensorboard_log=True, n_steps=4)
         self.tbw = self.model._setup_multitask_learn(self.max_steps)
         self.writer = self.tbw.enter()
 

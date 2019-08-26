@@ -9,8 +9,9 @@ import datetime
 
 
 class Agent:
-    def __init__(self, listOfGames):
+    def __init__(self, listOfGames, max_steps):
         self.listOfGames = listOfGames
+        self.max_steps = max_steps
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
         self.__setup_environments()
@@ -25,7 +26,7 @@ class Agent:
 
     def __setup_model(self):
         self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="/home/andris955/Documents/Dipterv/diplomaterv/data/logs", full_tensorboard_log=True, n_steps=4)
-        self.tbw = self.model._setup_multitask_learn(10000)
+        self.tbw = self.model._setup_multitask_learn(self.max_steps)
         self.writer = self.tbw.enter()
 
     def __setup_runners(self):

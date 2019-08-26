@@ -37,7 +37,7 @@ target_performances = {
     'Enduro-v0': 0.77
 }
 
-l = 100000
+l = 100_000
 
-MaxSteps = 100000
+MaxSteps = 1_000_000
 tau = 10

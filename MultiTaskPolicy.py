@@ -47,7 +47,7 @@ class BaseMultiTaskPolicy(ABC):
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
 
-    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=False,
+    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=True,
                  obs_phs=None, add_action_ph=False):
         self.n_env = n_env
         self.n_steps = n_steps
@@ -146,7 +146,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.policy_proba = {}
         self._value = {}
         for key in self.ac_space_dict.keys():
-            with tf.variable_scope(key + "_output", reuse=self.reuse):
+            with tf.variable_scope(key + "_output", reuse=True):
                 assert self.policy_dict is not {} and self.proba_distribution_dict is not {} and self.value_fn_dict is not {}
                 self.action[key] = self.proba_distribution_dict[key].sample()
                 self.deterministic_action[key] = self.proba_distribution_dict[key].mode()
@@ -203,17 +203,17 @@ class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
         super(MultiTaskA2CPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=True)
 
         with tf.variable_scope("shared_model", reuse=reuse):
-            pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
+            self.pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
 
         for key in self.pdtype_dict.keys():
             with tf.variable_scope(key + "_model", reuse=reuse):
                 self.value_fn_dict[key] = linear(vf_latent, key + '_vf', 1)
-                proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(pi_latent, vf_latent, init_scale=0.01)
+                proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(self.pi_latent, vf_latent, init_scale=0.01)
                 self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy
                 self.policy_dict[key] = policy # egy linear layer
                 self.q_value_dict[key] = q_value # linear layer
 
-        self.initial_state = None
+        self.initial_state = None #?
         self._setup_init()
 
     def step(self, game, obs, state=None, mask=None, deterministic=False):

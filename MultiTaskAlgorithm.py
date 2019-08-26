@@ -2,6 +2,8 @@ import global_config
 import local_config
 import numpy as np
 from utils import one_hot
+from stable_baselines.common import SetVerbosity
+
 
 class MultiTasking():
     def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, lam=None, MetaDecider=None):
@@ -39,20 +41,21 @@ class MultiTasking():
             self.s.append([0 for _ in range(self.n)])
 
     def __A5C_train(self):
-        for train_step in range(self.t):
-            if train_step > self.l:
-                for i, task in enumerate(self.T):
-                    self.a[i] = sum(self.s[i])/self.n
-                    self.m[i] = (self.ta[i] - self.a[i]) / (self.ta[i] * self.tau)
-                    self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
-            # j = self.p.index(max(self.p))
-            j = np.random.randint(self.k) #TODO ez rossz
-            # print(self.T[j])
-            score = self.amta.train_for_one_episode(self.T[j])
-            self.s[j].append(score)
-            if len(self.s[j]) > self.n:
-                self.s[j].pop(0)
-        self.amta.save_model()
+        with SetVerbosity(local_config.verbose):
+            for train_step in range(self.t):
+                if train_step > self.l:
+                    for i, task in enumerate(self.T):
+                        self.a[i] = sum(self.s[i])/self.n
+                        self.m[i] = (self.ta[i] - self.a[i]) / (self.ta[i] * self.tau)
+                        self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
+                # j = self.p.index(max(self.p))
+                j = np.random.randint(self.k) #TODO ez rossz
+                # print(self.T[j])
+                score = self.amta.train_for_one_episode(self.T[j])
+                self.s[j].append(score)
+                if len(self.s[j]) > self.n:
+                    self.s[j].pop(0)
+            self.amta.save_model()
 
     def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list)

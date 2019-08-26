@@ -497,7 +497,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
 
     def __init__(self, policy, env_dict, gamma=0.99, n_steps=4, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-5, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, tensorboard_log=None,
+                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
         super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, verbose=verbose, requires_vec_env=True,
@@ -544,7 +544,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
     def _setup_multitask_learn(self, number_of_steps, seed=None):
         new_tb_log = self._init_num_timesteps(True)
-        SetVerbosity(self.verbose)
         tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
 
         self._setup_learn(seed)
@@ -590,7 +589,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     neglogpac = {}
                     losses = {}
                     for key in self.env_dict.keys():
-                        neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph)
+                        neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph) #TODO lehet nem jó játék actionjeit kapja
                         self.entropy[key] = tf.reduce_mean(train_model.proba_distribution_dict[key].entropy())
                         self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key]) # policy gradient loss
                         self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
@@ -632,7 +631,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         grads = [grad for grad, var in grads_and_vars[key]]
                         vars = [var for grad, var in grads_and_vars[key]]
                         clipped_grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
-                        grads_and_vars[key] = list(zip(grads, vars))
+                        grads_and_vars[key] = list(zip(clipped_grads, vars))
                     self.apply_backprop[key] = optimizers[key].apply_gradients(grads_and_vars[key])
 
                 self.train_model = train_model
@@ -698,14 +697,14 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         t_start = time.time()
         # true_reward is the reward without discount
         self.updates = self.num_timesteps // (self.n_batch + 1)
-        obs, states, rewards, masks, actions, values, true_reward = runner.run()
+        obs, states, rewards, masks, actions, values, true_rewards = runner.run()
         _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer) #TODO writer
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
         if writer is not None:
             self.episode_reward[game] = utils.total_episode_reward_logger(game, self.episode_reward[game],
-                                                              true_reward.reshape((self.n_envs, self.n_steps)),
+                                                              true_rewards.reshape((self.n_envs, self.n_steps)),
                                                               masks.reshape((self.n_envs, self.n_steps)),
                                                               writer, self.num_timesteps)
 
@@ -778,7 +777,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
         mb_states = self.states
         for _ in range(self.n_steps):
-            actions, values, _ = self.model.step(self.env_name, self.obs) #TODO lehet, hogy amikor envet vált akkor a régi env képét kapja meg.
+            actions, values, _ = self.model.step(self.env_name, self.obs)
             if isinstance(self.env.action_space, gym.spaces.Discrete):
                 actions = np.clip(actions, 0, self.env.action_space.n)
             mb_obs.append(np.copy(self.obs))

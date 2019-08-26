@@ -48,9 +48,7 @@ class MultiTasking():
                         self.a[i] = sum(self.s[i])/self.n
                         self.m[i] = (self.ta[i] - self.a[i]) / (self.ta[i] * self.tau)
                         self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
-                j = self.p.index(max(self.p))
-                # j = np.random.randint(self.k) #TODO ez rossz
-                # print(self.T[j])
+                j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 score = self.amta.train_for_one_episode(self.T[j])
                 self.s[j].append(score)
                 if len(self.s[j]) > self.n:

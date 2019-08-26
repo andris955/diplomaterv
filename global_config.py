@@ -40,4 +40,4 @@ target_performances = {
 l = 100_000
 
 MaxSteps = 1_000_000
-tau = 10
+tau = 1

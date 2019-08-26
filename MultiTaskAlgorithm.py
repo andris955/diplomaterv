@@ -1,18 +1,18 @@
 import global_config
-import local_config
 import numpy as np
 from utils import one_hot
 from stable_baselines.common import SetVerbosity
 
 
 class MultiTasking():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, lam=None, MetaDecider=None):
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, verbose=1, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
         :param Algorithm: Chosen multi-task algorithm. Available: 'A5C','EA4C' ...
         """
         self.algorithm = Algorithm
+        self.verbose = verbose
         if self.algorithm == "A5C":
             self.__A5C_init(SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
@@ -41,7 +41,7 @@ class MultiTasking():
             self.s.append([0 for _ in range(self.n)])
 
     def __A5C_train(self):
-        with SetVerbosity(local_config.verbose):
+        with SetVerbosity(self.verbose):
             for train_step in range(self.t):
                 if train_step > self.l:
                     for i, task in enumerate(self.T):

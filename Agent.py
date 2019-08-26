@@ -1,7 +1,6 @@
 from MultiTaskA2C import MultitaskA2C
 from MultiTaskA2C import myA2CRunner
 from MultiTaskPolicy import MultiTaskA2CPolicy
-import local_config
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
 import os
@@ -9,9 +8,10 @@ import datetime
 
 
 class Agent:
-    def __init__(self, listOfGames, max_steps):
+    def __init__(self, listOfGames, max_steps, n_cpus):
         self.listOfGames = listOfGames
         self.max_steps = max_steps
+        self.n_cpus = n_cpus
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
         self.__setup_environments()
@@ -19,9 +19,8 @@ class Agent:
         self.__setup_runners()
 
     def __setup_environments(self):
-        n_cpu = local_config.number_of_cpus
         for game in self.listOfGames:
-            env = SubprocVecEnv([lambda: gym.make(game) for i in range(n_cpu)])
+            env = SubprocVecEnv([lambda: gym.make(game) for i in range(self.n_cpus)])
             self.sub_proc_environments[game] = env
 
     def __setup_model(self):
@@ -62,7 +61,7 @@ class Agent:
         now = now.replace('-', '_')
         try:
             os.mkdir("./data/models/" + now)
-            self.model.save("./data/models" + now)
+            self.model.save("./data/models/" + now)
         except:
             print("Error at saving the model")
 

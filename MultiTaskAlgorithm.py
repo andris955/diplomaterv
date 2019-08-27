@@ -38,7 +38,7 @@ class MultiTasking():
         for _ in range(self.k):
             self.p.append(1/self.k)
         for i in range(self.k):
-            self.s.append([0 for _ in range(self.n)])
+            self.s.append([0.0 for _ in range(self.n)])
 
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
@@ -49,8 +49,8 @@ class MultiTasking():
                         self.m[i] = (self.ta[i] - self.a[i]) / (self.ta[i] * self.tau)
                         self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                score = self.amta.train_for_one_episode(self.T[j])
-                self.s[j].append(score)
+                scores = self.amta.train_for_one_episode(self.T[j])
+                self.s[j].append(np.mean(scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
             self.amta.save_model()
@@ -78,16 +78,16 @@ class MultiTasking():
         for _ in range(self.k):
             self.p.append(1/self.k)
         for i in range(self.k):
-            self.s.append([0 for _ in range(self.n)])
+            self.s.append([0.0 for _ in range(self.n)])
         for i in range(self.k):
-            self.s_avg.append(0)
+            self.s_avg.append(0.0)
 
     def __EA4C_train(self):
         for train_step in range(self.t):
             j = self.p.index(max(self.p))
             self.c[j] = self.c[j] + 1
-            score = self.amta.train_for_one_episode(self.T[j])
-            self.s[j].append(score)
+            scores = self.amta.train_for_one_episode(self.T[j])
+            self.s[j].append(np.mean(scores))
             if len(self.s[j]) > self.n:
                 self.s[j].pop(0)
             for i in range(len(self.s_avg)):

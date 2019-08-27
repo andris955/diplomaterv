@@ -35,7 +35,7 @@ target_performances = {
     'Enduro-v0': 0.77
 }
 
-l = 100_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
+l = 10_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
 MaxSteps = 1_000_000
 tau = 1
 

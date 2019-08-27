@@ -27,7 +27,8 @@ def cnn_from_paper(scaled_images, **kwargs):
     layer_2 = activ(conv(layer_1, 'c2', n_filters=64, filter_size=4, stride=2, init_scale=np.sqrt(2), **kwargs))
     layer_3 = activ(conv(layer_2, 'c3', n_filters=64, filter_size=3, stride=1, init_scale=np.sqrt(2), **kwargs))
     layer_3 = conv_to_fc(layer_3)
-    return activ(linear(layer_3, 'fc1', n_hidden=512, init_scale=np.sqrt(2)))
+    layer_4 = activ(linear(layer_3, 'fc1', n_hidden=1024, init_scale=np.sqrt(2)))
+    return activ(linear(layer_4, 'fc2', n_hidden=512, init_scale=np.sqrt(2)))
 
 
 class BaseMultiTaskPolicy(ABC):

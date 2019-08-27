@@ -727,7 +727,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             logger.record_tabular("explained_variance", float(explained_var))
             logger.dump_tabular()
 
-        return self.episode_reward
+        return self.episode_reward[game]
 
     def save(self, save_path):
         data = {

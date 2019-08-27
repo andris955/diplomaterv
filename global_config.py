@@ -1,6 +1,18 @@
-MTI1 = ['SpaceInvaders-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'DemonAttack-v0', 'StarGunner-v0']
+MTI1 = ['SpaceInvaders-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'DemonAttack-v0', 'StarGunner-v0'] # disc, obs jó
 #actionspace disc 6             disc 9              disc 18         disc 6          disc 18
-MTI2 = ['SpaceInvaders-v0', 'Seaquest-v0']
+MTI2 = ["Asterix-v0", "Alien-v0", "Assault-v0", "TimePilot-v0", "Gopher-v0", "ChopperCommand-v0"] #disc, változó obs méret
+
+MTI3 = ['Breakout-v0', 'Centipede-v0', 'Frostbite-v0', 'Qbert-v0', 'KungFuMaster-v0', 'WizardOfWor-v0'] # disc, observation nem jó változik, de csak a méret
+
+MTI4 = ['Atlantis-v0', 'Breakout-v0', 'Bowling-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'SpaceInvaders-v0', 'Pong-v0', 'Enduro-v0'] # disc, observation jo
+
+MTI5 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0']
+
+MTI6 = ['Atlantis-v0', 'Amidar-v0', 'Breakout-v0', 'Bowling-v0', 'BeamRider-v0', 'ChopperCommand-v0', 'Centipede-v0', 'Frostbite-v0', 'KungFuMaster-v0', 'Pong-v0', 'RoadRunner-v0', 'Phoenix-v0']
+
+MTI7 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0', 'Amidar-v0', 'ChopperCommand-v0', 'Breakout-v0', 'BeamRider-v0', 'Bowling-v0', 'Centipede-v0', 'Krull-v0', 'Kangaroo-v0', 'Phoenix-v0']
+
+MTIC = ['Breakout-v0', 'Seaquest-v0']
 
 target_performances = {
     'SpaceInvaders-v0': 1200,
@@ -12,7 +24,7 @@ target_performances = {
     'BankHeist-v0': 1700,
     'CrazyClimber-v0': 170000,
     'DemonAttack-v0': 27000,
-    'Gropher-v0': 9400, #?
+    'Gropher-v0': 9400,
     'NameThisGame-v0': 12100,
     'StarGunner-v0': 40000,
     'Tutankham-v0': 260,
@@ -31,12 +43,18 @@ target_performances = {
     'Pond-v0': 19.5,
     'RoadRunner-v0': 59540,
     'Qbert-v0': 26000,
-    'WizardofWor-v0': 3300,
+    'WizardOfWor-v0': 3300,
     'Enduro-v0': 0.77
 }
 
 l = 10_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-MaxSteps = 1_000_000
+MaxSteps = 5_000_000
 tau = 1
+n_steps = 5
+model_id = "A5C_19_08_27_18_58"
 
-model_path = ""
+if __name__ == '__main__':
+    import gym
+    for env_name in MTI7:
+        env = gym.make(env_name)
+        print("{} - {}".format(env_name, env.action_space))

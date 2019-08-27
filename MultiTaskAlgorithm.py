@@ -2,10 +2,11 @@ import global_config
 import numpy as np
 from utils import one_hot
 from stable_baselines.common import SetVerbosity
+from Agent import Agent
 
 
 class MultiTasking():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, verbose=1, lam=None, MetaDecider=None):
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, n_cpus, transfer_id, verbose=1, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
@@ -13,6 +14,7 @@ class MultiTasking():
         """
         self.algorithm = Algorithm
         self.verbose = verbose
+        ActiveSamplingMultiTaskAgent = Agent(Algorithm, SetOfTasks, global_config.MaxSteps, n_cpus, transfer_id)
         if self.algorithm == "A5C":
             self.__A5C_init(SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
@@ -50,10 +52,13 @@ class MultiTasking():
                         self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 scores = self.amta.train_for_one_episode(self.T[j])
+                if train_step % 10 == 0:
+                    self.amta.save_model()
                 self.s[j].append(np.mean(scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
             self.amta.save_model()
+            self.amta.exit_tbw()
 
     def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list)
@@ -100,12 +105,10 @@ class MultiTasking():
             self.r = self.lam * self.r1 + (1 - self.lam) * self.r2
             self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, one_hot(j, self.k)], reward=self.r)
         self.amta.save_model()
+        self.amta.exit_tbw()
 
     def train(self):
         if self.algorithm == "A5C":
             self.__A5C_train()
         elif self.algorithm == "EA4C":
             self.__EA4C_train()
-
-    def get_agent(self):
-        return self.amta

@@ -17,9 +17,10 @@ from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, SetVerbosity
 from stable_baselines.common.runners import AbstractEnvRunner
-from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse
+from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse, find_trainable_variables
 from TensorboardWriter import TensorboardWriter
 
+import json
 import utils
 import tf_util
 
@@ -150,6 +151,13 @@ class BaseMultitaskRLModel(ABC):
         """
         pass
 
+    @abstractmethod
+    def setup_step_model(self):
+        """
+        Create all the functions and tensorflow graphs necessary to play with the model
+        """
+        pass
+
     def _setup_learn(self, seed):
         """
         check the environment, set the seed, and set the logger
@@ -227,34 +235,38 @@ class BaseMultitaskRLModel(ABC):
         raise NotImplementedError()
 
     @staticmethod
-    def _save_to_file(save_path, data=None, params=None):
+    def _save_to_file(save_path, json_params=None, weights=None, params=None):
         if isinstance(save_path, str):
             _, ext = os.path.splitext(save_path)
             if ext == "":
-                save_path += ".pkl"
+                model_path = os.path.join(save_path, 'model.pkl')
+                param_path = os.path.join(save_path, 'params.json')
 
-            with open(save_path, "wb") as file_:
-                cloudpickle.dump((data, params), file_)
+                with open(model_path, "wb") as file_:
+                    cloudpickle.dump((weights, params), file_)
+
+                if not os.path.exists(param_path):
+                    with open(param_path, "w") as file_:
+                        json.dump(json_params, file_)
+            else:
+                raise ValueError("Error at saving model and parameters")
+
         else:
-            # Here save_path is a file-like object, not a path
-            cloudpickle.dump((data, params), save_path)
+            raise ValueError("Error: save_path must be a string")
 
     @staticmethod
     def _load_from_file(load_path):
         if isinstance(load_path, str):
-            if not os.path.exists(load_path):
-                if os.path.exists(load_path + ".pkl"):
-                    load_path += ".pkl"
-                else:
-                    raise ValueError("Error: the file {} could not be found".format(load_path))
-
-            with open(load_path, "rb") as file:
-                data, params = cloudpickle.load(file)
+            model_path = os.path.join(load_path, 'model.pkl')
+            if os.path.exists(model_path):
+                with open(model_path, "rb") as file:
+                    weights, params = cloudpickle.load(file)
+            else:
+                raise ValueError("Error: No such file {}".format(model_path))
         else:
-            # Here load_path is a file-like object, not a path
-            data, params = cloudpickle.load(load_path)
+            raise ValueError("Error: load_path must be a string")
 
-        return data, params
+        return weights, params
 
     @staticmethod
     def _softmax(x_input):
@@ -341,45 +353,49 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         self.initial_state = None
         self.step = None
         self.proba_step = None
-        self.params = None
+        self.trainable_variables = None
 
     @abstractmethod
     def setup_model(self):
         pass
 
+    @abstractmethod
+    def setup_step_model(self):
+        pass
+
     def predict(self, game, observation, state=None, mask_dict=None, deterministic=False):
-        if state is None:
-            state = self.initial_state
-        if mask_dict is None:
-            mask_dict = {}
-            for key in self.env_dict.keys():
-                mask_dict[key] = [False for _ in range(self.n_envs)]
+        # if state is None:
+        #     state = self.initial_state
+        # if mask_dict is None:
+        #     mask_dict = {}
+        #     for key in self.env_dict.keys():
+        #         mask_dict[key] = [False for _ in range(self.n_envs)]
 
         observation = np.array(observation)
-        vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
+        # vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 
         assert isinstance(game, str), "Error: the game passed is not a string"
 
         try:
-            self.env_dict[game]
+            self.action_space_dict[game]
         except:
             print("The game must be in the env_dict dictionary!")
             exit()
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions, _, states, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
+        actions, _, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
 
         clipped_actions = actions
-        # Clip the actions to avoid out of bound error
-        if isinstance(self.action_space_dict[game], gym.spaces.Box):
-            clipped_actions = np.clip(actions, self.action_space_dict[game].low, self.action_space_dict[game].high)
+        # # Clip the actions to avoid out of bound error
+        # if isinstance(self.action_space_dict[game], gym.spaces.Box):
+        #     clipped_actions = np.clip(actions, self.action_space_dict[game].low, self.action_space_dict[game].high)
+        #
+        # if not vectorized_env:
+        #     if state is not None:
+        #         raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
+        #     clipped_actions = clipped_actions[0]
 
-        if not vectorized_env:
-            if state is not None:
-                raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            clipped_actions = clipped_actions[0]
-
-        return clipped_actions, states
+        return clipped_actions #, states
 
     def action_probability(self, game, observation, state=None, mask_dict=None, actions=None):
         if state is None:
@@ -446,23 +462,25 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     @classmethod
-    def load(cls, load_path, env=None, **kwargs):
-        data, params = cls._load_from_file(load_path)
+    def load(cls, model_id, env=None, **kwargs):
+        load_path = os.path.join('./data/models', model_id)
+        # load_path = os.path.join(load_path, 'model.pkl')
+        weights, params = cls._load_from_file(load_path)
 
-        if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
+        if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != params['policy_kwargs']:
             raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
+                             "Stored kwargs: {}, specified kwargs: {}".format(params['policy_kwargs'],
                                                                               kwargs['policy_kwargs']))
 
-        model = cls(policy=data["policy"], env_dict=None, _init_setup_model=False)
-        model.__dict__.update(data)
+        model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
+        model.__dict__.update(params)
         model.__dict__.update(kwargs)
         model.set_env(env)
-        model.setup_model()
+        model.setup_step_model()
 
         restores = []
-        for param, loaded_p in zip(model.params, params):
-            restores.append(param.assign(loaded_p))
+        for param, loaded_weight in zip(model.trainable_variables, weights):
+            restores.append(param.assign(loaded_weight))
         model.sess.run(restores)
 
         return model
@@ -497,7 +515,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env_dict, gamma=0.99, n_steps=4, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
+    def __init__(self, policy, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=1, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -526,14 +544,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.pg_loss = {}
         self.vf_loss = {}
         self.entropy = {}
-        self.params = None
+        self.trainable_variables = None
         self.apply_backprop = None
         self.train_model = None
         self.step_model = None
-        # self.step = None
-        # self.proba_step = None
         self.value = None
-        # self.initial_state = None
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
@@ -543,9 +558,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         if _init_setup_model:
             self.setup_model()
 
-    def _setup_multitask_learn(self, number_of_steps, seed=None):
-        new_tb_log = self._init_num_timesteps(True)
-        tbw = TensorboardWriter(self.graph, self.tensorboard_log, "A2C", new_tb_log)
+    def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, transfer_id, seed=None):
+        if transfer_id == None:
+            new_tb_log = self._init_num_timesteps(True)
+            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
+        else:
+            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, transfer_id)
+
 
         self._setup_learn(seed)
 
@@ -556,6 +575,21 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.episode_reward[key] = np.zeros((self.n_envs,))
 
         return tbw
+
+    def setup_step_model(self):
+        assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
+                                                                    "instance of common.policies.ActorCriticPolicy."
+
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            self.sess = tf_util.make_session(graph=self.graph)
+            n_batch_step = None
+
+            step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
+                                     n_batch_step, reuse=False, **self.policy_kwargs)
+
+            self.trainable_variables = find_trainable_variables("model")
+            self.step = step_model.step
 
     def setup_model(self):
         with SetVerbosity(self.verbose):
@@ -581,7 +615,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 with tf.variable_scope("loss", reuse=False):
                     # for key in self.env_dict.keys():
-                    self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph") #TODO leellenőrizni, h minnden ugyanolyan típusú distribution-e
+                    self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
                     # self.actions_ph = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
                     self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph") # advantages
                     self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
@@ -590,7 +624,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     neglogpac = {}
                     losses = {}
                     for key in self.env_dict.keys():
-                        neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph) #TODO lehet nem jó játék actionjeit kapja
+                        neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph)
                         self.entropy[key] = tf.reduce_mean(train_model.proba_distribution_dict[key].entropy())
                         self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key]) # policy gradient loss
                         self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
@@ -626,7 +660,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.apply_backprop = {}
                 for key in self.env_dict.keys():
                     optimizers[key] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
-                    # self.apply_backprop[key] = optimizers[key].minimize(losses[key])
                     grads_and_vars[key] = optimizers[key].compute_gradients(losses[key])
                     if self.max_grad_norm is not None:
                         grads = [grad for grad, var in grads_and_vars[key]]
@@ -641,6 +674,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.proba_step = step_model.proba_step
                 self.value = step_model.value
                 self.initial_state = step_model.initial_state
+
+                self.trainable_variables = find_trainable_variables("model")
+
                 tf.global_variables_initializer().run(session=self.sess)
 
                 self.summary = tf.summary.merge_all()
@@ -660,7 +696,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: (float, float, float) policy loss, value loss, policy entropy
         """
-        advs = rewards - values #TODO átnézni
+        advs = rewards - values
         cur_lr = None
         for _ in range(len(obs)):
             cur_lr = self.learning_rate_schedule.value()
@@ -697,9 +733,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         t_start = time.time()
         # true_reward is the reward without discount
-        self.updates = self.num_timesteps // (self.n_batch + 1)
+        self.updates = self.num_timesteps // self.n_batch + 1
         obs, states, rewards, masks, actions, values, true_rewards = runner.run()
-        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer) #TODO writer
+        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
@@ -709,7 +745,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                                                               masks.reshape((self.n_envs, self.n_steps)),
                                                               writer, self.num_timesteps)
 
-        self.num_timesteps += self.n_batch + 1
+        self.num_timesteps += self.n_batch
 
         if callback is not None:
             # Only stop training if return value is False, not when it is None. This is for backwards
@@ -730,7 +766,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         return self.episode_reward[game]
 
     def save(self, save_path):
-        data = {
+        params = {
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
@@ -742,16 +778,41 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
             "policy": self.policy,
+            # 'env_dict': self.env_dict,
             "observation_space": self.observation_space,
-            "action_space": self.action_space_dict,
+            "action_space_dict": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
         }
 
-        params = self.sess.run(self.params)
+        json_params = {
+            'envs': [],
+            "gamma": self.gamma,
+            "n_steps": self.n_steps,
+            "vf_coef": self.vf_coef,
+            "ent_coef": self.ent_coef,
+            "max_grad_norm": self.max_grad_norm,
+            "learning_rate": self.learning_rate,
+            "alpha": self.alpha,
+            "epsilon": self.epsilon,
+            "lr_schedule": self.lr_schedule,
+            "verbose": self.verbose,
+            # "policy": self.policy,
+            "observation_space": self.observation_space.shape,
+            "action_space": {},
+            "n_envs": self.n_envs,
+            "_vectorize_action": self._vectorize_action,
+            # "policy_kwargs": self.policy_kwargs
+        }
 
-        self._save_to_file(save_path, data=data, params=params)
+        for game, value in self.action_space_dict.items():
+            json_params['envs'].append(game)
+            json_params["action_space"][game] = value.n
+
+        weights = self.sess.run(self.trainable_variables)
+
+        self._save_to_file(save_path, json_params=json_params, weights=weights, params=params)
 
 
 class myA2CRunner(AbstractEnvRunner):

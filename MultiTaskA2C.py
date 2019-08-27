@@ -15,12 +15,13 @@ from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common import set_global_seeds
 
 from stable_baselines import logger
-from stable_baselines.common import explained_variance, tf_util, SetVerbosity
+from stable_baselines.common import explained_variance, SetVerbosity
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse
 from TensorboardWriter import TensorboardWriter
 
 import utils
+import tf_util
 
 
 class BaseMultitaskRLModel(ABC):

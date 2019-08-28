@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from gym.spaces import Discrete
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc
-from distributions import make_proba_dist_type, CategoricalProbabilityDistribution
+from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution
 from stable_baselines.common.input import observation_input
 
 
@@ -128,7 +128,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
         for key, value in ac_space_dict.items():
-            self.pdtype_dict[key] = make_proba_dist_type(ac_space_dict[key], key)
+            self.pdtype_dict[key] = make_proba_dist_type(ac_space_dict[key])
             self.is_discrete_dict[key] = isinstance(ac_space_dict[key], Discrete)
         self.policy_dict = {}
         self.proba_distribution_dict = {}
@@ -199,6 +199,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         """
         raise NotImplementedError
 
+
 class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
     def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, cnn_extractor=cnn_from_paper, **kwargs):
         super(MultiTaskA2CPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=True)
@@ -214,7 +215,8 @@ class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
                 self.policy_dict[key] = policy # egy linear layer
                 self.q_value_dict[key] = q_value # linear layer
 
-        self.initial_state = None #?
+        self.initial_state = None
+
         self._setup_init()
 
     def step(self, game, obs, state=None, mask=None, deterministic=False):

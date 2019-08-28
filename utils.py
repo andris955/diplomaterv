@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import os
 
 def one_hot(k, n):
     """
@@ -40,3 +41,15 @@ def total_episode_reward_logger(game, rew_acc, rewards, masks, writer, steps):
                 rew_acc[env_idx] = sum(rewards[env_idx, dones_idx[-1, 0]:])
 
     return rew_acc
+
+def dir_check():
+    if not os.path.exists('./data'):
+        os.mkdir('./data')
+    if not os.path.exists('./data/models'):
+        os.mkdir('./data/models')
+    if not os.path.exists('./data/logs'):
+        os.mkdir('./data/logs')
+    return
+
+if __name__ == '__main__':
+    dir_check()

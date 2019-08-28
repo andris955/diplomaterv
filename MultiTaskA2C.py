@@ -99,7 +99,7 @@ class BaseMultitaskRLModel(ABC):
             raise ValueError("Error: trying to replace the current environment with None")
 
         # sanity checking the environment
-        for key, env in self.env_dict.items():
+        for key, env in env_dict.items():
             assert self.observation_space == env.observation_space, \
                 "Error: the environments passed must have at least the same observation space as the model was trained on."
             assert self.action_space_dict[key] == env.action_space, \
@@ -145,7 +145,7 @@ class BaseMultitaskRLModel(ABC):
         return new_tb_log
 
     @abstractmethod
-    def setup_model(self):
+    def setup_model(self, transfer=False):
         """
         Create all the functions and tensorflow graphs necessary to train the model
         """
@@ -222,16 +222,7 @@ class BaseMultitaskRLModel(ABC):
 
     @classmethod
     @abstractmethod
-    def load(cls, load_path, env=None, **kwargs):
-        """
-        Load the model from file
-
-        :param load_path: (str or file-like) the saved parameter location
-        :param env: (Gym Envrionment) the new environment to run the loaded model on
-            (can be None if you only need prediction from a trained model)
-        :param kwargs: extra arguments to change the model when loading
-        """
-        # data, param = cls._load_from_file(load_path)
+    def load(cls, model_id, envs_to_set=None, transfer=False):
         raise NotImplementedError()
 
     @staticmethod
@@ -330,7 +321,8 @@ class BaseMultitaskRLModel(ABC):
                              .format(observation_space))
 
 
-#--------------------------------------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     """
@@ -356,7 +348,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         self.trainable_variables = None
 
     @abstractmethod
-    def setup_model(self):
+    def setup_model(self, transfer=False):
         pass
 
     @abstractmethod
@@ -395,7 +387,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         #         raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
         #     clipped_actions = clipped_actions[0]
 
-        return clipped_actions #, states
+        return clipped_actions  # , states
 
     def action_probability(self, game, observation, state=None, mask_dict=None, actions=None):
         if state is None:
@@ -462,31 +454,45 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     @classmethod
-    def load(cls, model_id, env=None, **kwargs):
+    def load(cls, model_id, envs_to_set=None, transfer=False):
         load_path = os.path.join('./data/models', model_id)
         # load_path = os.path.join(load_path, 'model.pkl')
         weights, params = cls._load_from_file(load_path)
 
-        if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != params['policy_kwargs']:
-            raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(params['policy_kwargs'],
-                                                                              kwargs['policy_kwargs']))
+        # if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != params['policy_kwargs']:
+        #     raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
+        #                      "Stored kwargs: {}, specified kwargs: {}".format(params['policy_kwargs'],
+        #                                                                       kwargs['policy_kwargs']))
 
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
-        model.__dict__.update(kwargs)
-        model.set_env(env)
-        model.setup_step_model()
+        # model.__dict__.update(kwargs)
+
+        envs = [key for key in params['action_space_dict'].keys()]
+
+        if not transfer:
+            model.setup_step_model()
+        else:
+            envs_to_set_names = [key for key in envs_to_set.keys()]
+            if envs == envs_to_set_names:
+                model.set_env(envs_to_set)
+                model.setup_model(transfer=True)
+            else:
+                print("The envs passed as argument is not corresponding to the envs that the model is trained on: {}".format(str(envs)))
+                exit()
 
         restores = []
         for param, loaded_weight in zip(model.trainable_variables, weights):
             restores.append(param.assign(loaded_weight))
         model.sess.run(restores)
 
-        return model
+        model.sess.graph.finalize()
+
+        return model, envs
 
 
-#---------------------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------------------
+
 
 class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
@@ -535,7 +541,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.full_tensorboard_log = full_tensorboard_log
 
         self.graph = None
-        # self.sess = None
+        self.sess = None
         self.learning_rate_ph = None
         self.n_batch = None
         self.actions_ph = None
@@ -558,13 +564,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         if _init_setup_model:
             self.setup_model()
 
-    def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, transfer_id, seed=None):
+    def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, seed=3):
         if transfer_id == None:
             new_tb_log = self._init_num_timesteps(True)
             tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
         else:
-            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, transfer_id)
-
+            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, transfer_id) #TODO a transfert megcsinálni
 
         self._setup_learn(seed)
 
@@ -588,14 +593,14 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
                                      n_batch_step, reuse=False, **self.policy_kwargs)
 
-            self.trainable_variables = find_trainable_variables("model")
+            self.trainable_variables = find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
 
-    def setup_model(self):
+    def setup_model(self, transfer=False):
         with SetVerbosity(self.verbose):
 
             assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                               "instance of common.policies.ActorCriticPolicy."
+                                                                        "instance of common.policies.ActorCriticPolicy."
 
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -617,7 +622,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     # for key in self.env_dict.keys():
                     self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
                     # self.actions_ph = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
-                    self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph") # advantages
+                    self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
                     self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
@@ -626,7 +631,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     for key in self.env_dict.keys():
                         neglogpac[key] = train_model.proba_distribution_dict[key].neglogp(self.actions_ph)
                         self.entropy[key] = tf.reduce_mean(train_model.proba_distribution_dict[key].entropy())
-                        self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key]) # policy gradient loss
+                        self.pg_loss[key] = tf.reduce_mean(self.advs_ph * neglogpac[key])  # policy gradient loss
                         self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
                         losses[key] = self.pg_loss[key] - self.entropy[key] * self.ent_coef + self.vf_loss[key] * self.vf_coef
 
@@ -681,6 +686,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.summary = tf.summary.merge_all()
 
+                if not transfer:
+                    self.sess.graph.finalize()
+
     def _train_step(self, game, obs, states, rewards, masks, actions, values, update, writer=None):
         """
         applies a training step to the model
@@ -697,6 +705,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         :return: (float, float, float) policy loss, value loss, policy entropy
         """
         advs = rewards - values
+
         cur_lr = None
         for _ in range(len(obs)):
             cur_lr = self.learning_rate_schedule.value()
@@ -741,9 +750,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         if writer is not None:
             self.episode_reward[game] = utils.total_episode_reward_logger(game, self.episode_reward[game],
-                                                              true_rewards.reshape((self.n_envs, self.n_steps)),
-                                                              masks.reshape((self.n_envs, self.n_steps)),
-                                                              writer, self.num_timesteps)
+                                                                          true_rewards.reshape((self.n_envs, self.n_steps)),
+                                                                          masks.reshape((self.n_envs, self.n_steps)),
+                                                                          writer, self.num_timesteps)
 
         self.num_timesteps += self.n_batch
 
@@ -778,11 +787,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
             "policy": self.policy,
-            # 'env_dict': self.env_dict,
+            #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
             "observation_space": self.observation_space,
             "action_space_dict": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
+            'tensorboard_log': self.tensorboard_log,
+            "full_tensorboard_log": self.full_tensorboard_log,
             "policy_kwargs": self.policy_kwargs
         }
 

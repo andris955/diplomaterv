@@ -51,7 +51,7 @@ l = 10_000  # Number of training steps for which a uniformly random policy is ex
 MaxSteps = 5_000_000
 tau = 1
 n_steps = 5
-model_id = "A5C_19_08_27_18_58"
+model_id = "A5C_19_09_24_08_04"
 
 if __name__ == '__main__':
     import gym

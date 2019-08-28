@@ -1,16 +1,16 @@
 from MultiTaskAlgorithm import MultiTasking
 import global_config
 from Agent import Agent
+from utils import dir_check
 
-
-def main(selected_mti, n_cpus, train=True, transfer_id=None):
+def main(algorithm, selected_mti, n_cpus, max_steps, l, train=True, transfer_id=None, model_id=None):
     if train:
-        mt = MultiTasking(selected_mti, "A5C", 3, global_config.target_performances, global_config.l, global_config.MaxSteps, n_cpus, transfer_id)
+        dir_check()
+        mt = MultiTasking(selected_mti, algorithm, 3, global_config.target_performances, l, max_steps, n_cpus, transfer_id)
         mt.train()
     else:
-        for game in selected_mti:
-            Agent.play(global_config.model_id, game, max_number_of_games=3, show_render=True)
+        Agent.play(model_id, max_number_of_games=3, show_render=True)
 
 
 if __name__ == '__main__':
-    main(selected_mti=global_config.MTIC, n_cpus=2, train=False)
+    main(algorithm='A5C', selected_mti=global_config.MTI1, n_cpus=2, max_steps=global_config.MaxSteps, l=100, train=True, transfer_id=None, model_id=global_config.model_id)

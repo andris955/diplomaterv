@@ -35,8 +35,11 @@ class Agent:
             self.sub_proc_environments[game] = env
 
     def __setup_model(self):
-        self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="./data/logs", full_tensorboard_log=True, n_steps=global_config.n_steps)
-        self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_steps, self.initialize_time, self.transfer_id)
+        if self.transfer_id is None:
+            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="./data/logs", full_tensorboard_log=True, n_steps=global_config.n_steps)
+        else:
+            self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
+        self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_steps, self.initialize_time)
         self.writer = self.tbw.enter()
 
     def __setup_runners(self):
@@ -50,23 +53,24 @@ class Agent:
         return score
 
     @staticmethod
-    def play(model_id, game, max_number_of_games, show_render=False):
-        number_of_games = 0
-        sum_reward = 0
-        model = MultitaskA2C.load(model_id)
-        env = gym.make(game)
-        obs = env.reset()
-        while number_of_games < max_number_of_games:
-            action = model.predict(game, obs)
-            obs, rewards, done, info = env.step(action)
-            if done:
-                obs = env.reset()
-                number_of_games += 1
-                print(sum_reward)
-                sum_reward = 0
-            sum_reward += rewards
-            if show_render is True:
-                env.render()
+    def play(model_id, max_number_of_games, show_render=False):
+        model, games = MultitaskA2C.load(model_id)
+        for game in games:
+            number_of_games = 0
+            sum_reward = 0
+            env = gym.make(game)
+            obs = env.reset()
+            while number_of_games < max_number_of_games:
+                action = model.predict(game, obs)
+                obs, rewards, done, info = env.step(action)
+                if done:
+                    obs = env.reset()
+                    number_of_games += 1
+                    print(sum_reward)
+                    sum_reward = 0
+                sum_reward += rewards
+                if show_render is True:
+                    env.render()
 
     def save_model(self):
         try:

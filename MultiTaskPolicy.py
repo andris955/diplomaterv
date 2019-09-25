@@ -202,9 +202,9 @@ class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
 
         for key in self.pdtype_dict.keys():
             with tf.variable_scope(key + "_model", reuse=reuse):
-                self.value_fn_dict[key] = linear(vf_latent, key + '_vf', 1)
+                self.value_fn_dict[key] = linear(vf_latent, 'vf', 1)
                 proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(self.pi_latent, vf_latent, init_scale=0.01)
-                self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy
+                self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy a policy layeren
                 self.policy_dict[key] = policy # egy linear layer
                 self.q_value_dict[key] = q_value # linear layer
 

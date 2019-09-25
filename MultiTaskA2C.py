@@ -356,16 +356,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     def predict(self, game, observation, state=None, mask_dict=None, deterministic=False):
-        # if state is None:
-        #     state = self.initial_state
-        # if mask_dict is None:
-        #     mask_dict = {}
-        #     for key in self.env_dict.keys():
-        #         mask_dict[key] = [False for _ in range(self.n_envs)]
-
         observation = np.array(observation)
-        # vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
-
         assert isinstance(game, str), "Error: the game passed is not a string"
 
         try:

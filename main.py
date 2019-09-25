@@ -3,6 +3,7 @@ import global_config
 from Agent import Agent
 from utils import dir_check
 
+
 def main(algorithm, selected_mti, n_cpus, max_steps, l, train=True, transfer_id=None, model_id=None):
     if train:
         dir_check()

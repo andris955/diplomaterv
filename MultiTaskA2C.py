@@ -456,13 +456,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     @classmethod
     def load(cls, model_id, envs_to_set=None, transfer=False):
         load_path = os.path.join('./data/models', model_id)
-        # load_path = os.path.join(load_path, 'model.pkl')
         weights, params = cls._load_from_file(load_path)
-
-        # if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != params['policy_kwargs']:
-        #     raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-        #                      "Stored kwargs: {}, specified kwargs: {}".format(params['policy_kwargs'],
-        #                                                                       kwargs['policy_kwargs']))
 
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
@@ -565,11 +559,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.setup_model()
 
     def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, seed=3):
-        if transfer_id == None:
-            new_tb_log = self._init_num_timesteps(True)
-            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
-        else:
-            tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, transfer_id) #TODO a transfert megcsinálni
+        _ = self._init_num_timesteps(True)
+        tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
 
         self._setup_learn(seed)
 

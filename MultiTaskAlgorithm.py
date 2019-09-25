@@ -55,8 +55,9 @@ class MultiTasking():
                         self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 scores = self.amta.train_for_one_episode(self.T[j])
-                if train_step % 10 == 0:
+                if train_step % 100 == 0:
                     self.amta.save_model()
+                    self.amta.flush_tbw()
                 self.s[j].append(np.mean(scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)

@@ -16,6 +16,7 @@ class Agent:
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
+        self.tbw = None
 
         now = str(datetime.datetime.now())[2:16]
         now = now.replace(' ', '_')
@@ -40,7 +41,6 @@ class Agent:
         else:
             self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
         self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_steps, self.initialize_time)
-        self.writer = self.tbw.enter()
 
     def __setup_runners(self):
         self.runners = {}
@@ -49,7 +49,7 @@ class Agent:
 
     def train_for_one_episode(self, game):
         runner = self.runners[game]
-        score = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
+        score = self.model.multi_task_learn_for_one_episode(game, runner, self.tbw.writer)
         return score
 
     @staticmethod
@@ -81,6 +81,11 @@ class Agent:
             print("Error at saving the model")
 
     def exit_tbw(self):
-        self.tbw.exit(None, None, None)
+        if self.tbw is not None:
+            self.tbw.exit()
+
+    def flush_tbw(self):
+        if self.tbw is not None:
+            self.tbw.flush()
 
 

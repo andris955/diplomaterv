@@ -154,13 +154,6 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
                 self.neglogp[key] = self.proba_distribution_dict[key].neglogp(self.action[key])
                 if isinstance(self.proba_distribution_dict[key], CategoricalProbabilityDistribution):
                     self.policy_proba[key] = tf.nn.softmax(self.policy_dict[key])
-                # elif isinstance(self.proba_distribution, DiagGaussianProbabilityDistribution):
-                #     self.policy_proba = [self.proba_distribution.mean, self.proba_distribution.std]
-                # elif isinstance(self.proba_distribution, BernoulliProbabilityDistribution):
-                #     self.policy_proba = tf.nn.sigmoid(self.policy)
-                # elif isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
-                #     self.policy_proba = [tf.nn.softmax(categorical.flatparam())
-                #                          for categorical in self.proba_distribution.categoricals]
                 else:
                     self.policy_proba[key] = []  # it will return nothing, as it is not implemented
                 self._value[key] = self.value_fn_dict[key][:, 0]

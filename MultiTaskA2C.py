@@ -601,9 +601,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
-                    # for key in self.env_dict.keys():
                     self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
-                    # self.actions_ph = train_model.pdtype_dict[key].sample_placeholder([None], name="action_ph")
                     self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
                     self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
@@ -622,25 +620,18 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         tf.summary.scalar(key + '_value_function_loss', self.vf_loss[key])
                         tf.summary.scalar(key + '_loss', losses[key])
 
-                    # self.params = find_trainable_variables("model")
-                    # grads = tf.gradients(loss, self.params)
-                    # if self.max_grad_norm is not None:
-                    #     grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
-                    # grads = list(zip(grads, self.params))
-
                 with tf.variable_scope("input_info", reuse=False):
-                    tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
-                    tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
-                    if self.full_tensorboard_log:
-                        tf.summary.histogram('discounted_rewards', self.rewards_ph)
-                        tf.summary.histogram('learning_rate', self.learning_rate_ph)
-                        tf.summary.histogram('advantage', self.advs_ph)
-                        if tf_util.is_image(self.observation_space):
-                            tf.summary.image('observation', train_model.obs_ph)
-                            pass
-                        else:
-                            tf.summary.histogram('observation', train_model.obs_ph)
+                    # tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
+                    # tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
+                    # if self.full_tensorboard_log:
+                        # tf.summary.histogram('discounted_rewards', self.rewards_ph)
+                        # tf.summary.histogram('learning_rate', self.learning_rate_ph)
+                        # tf.summary.histogram('advantage', self.advs_ph)
+                        # if tf_util.is_image(self.observation_space):
+                        #     tf.summary.image('observation', train_model.obs_ph)
+                        # else:
+                        #     tf.summary.histogram('observation', train_model.obs_ph)
 
                 optimizers = {}
                 grads_and_vars = {}
@@ -692,6 +683,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         for _ in range(len(obs)):
             cur_lr = self.learning_rate_schedule.value()
         assert cur_lr is not None, "Error: the observation input array cannon be empty"
+
+        if writer is not None:
+            utils.tensorboard_logger(game, rewards, advs, writer, self.num_timesteps, obs=None)
+
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}

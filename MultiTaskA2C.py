@@ -684,9 +684,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             cur_lr = self.learning_rate_schedule.value()
         assert cur_lr is not None, "Error: the observation input array cannon be empty"
 
-        if writer is not None:
+        if writer is not None and (self.num_timesteps % 1000 == 0):
             utils.tensorboard_logger(game, rewards, advs, writer, self.num_timesteps, obs=None)
-
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}

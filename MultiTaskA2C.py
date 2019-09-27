@@ -16,8 +16,7 @@ from stable_baselines.common import set_global_seeds
 
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, SetVerbosity
-from stable_baselines.common.runners import AbstractEnvRunner
-from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse, find_trainable_variables
+from stable_baselines.a2c.utils import Scheduler, mse, find_trainable_variables
 from TensorboardWriter import TensorboardWriter
 
 import json
@@ -544,6 +543,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.summary = None
         self.episode_reward = None
         self.updates = None
+        self.transfer_id = None
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
@@ -615,10 +615,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         self.vf_loss[key] = mse(tf.squeeze(train_model.value_fn_dict[key]), self.rewards_ph)
                         losses[key] = self.pg_loss[key] - self.entropy[key] * self.ent_coef + self.vf_loss[key] * self.vf_coef
 
-                        tf.summary.scalar(key + '_entropy_loss', self.entropy[key])
+                        # tf.summary.scalar(key + '_entropy_loss', self.entropy[key])
                         tf.summary.scalar(key + '_policy_gradient_loss', self.pg_loss[key])
                         tf.summary.scalar(key + '_value_function_loss', self.vf_loss[key])
-                        tf.summary.scalar(key + '_loss', losses[key])
+                        # tf.summary.scalar(key + '_loss', losses[key])
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
@@ -720,7 +720,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         # true_reward is the reward without discount
         self.updates = self.num_timesteps // self.n_batch + 1
         obs, states, rewards, masks, actions, values, true_rewards = runner.run()
-        _, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
+        policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
@@ -748,7 +748,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             logger.record_tabular("explained_variance", float(explained_var))
             logger.dump_tabular()
 
-        return self.episode_reward[game]
+        return self.episode_reward[game], policy_loss, value_loss
 
     def save(self, save_path):
         params = {
@@ -790,6 +790,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "action_space": {},
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
+            'transfer_id': self.transfer_id
             # "policy_kwargs": self.policy_kwargs
         }
 
@@ -800,70 +801,3 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         weights = self.sess.run(self.trainable_variables)
 
         self._save_to_file(save_path, json_params=json_params, weights=weights, params=params)
-
-
-class myA2CRunner(AbstractEnvRunner):
-    def __init__(self, env_name, env, model, n_steps=5, gamma=0.99):
-        """
-        A runner to learn the policy of an environment for an a2c model
-
-        :param env: (Gym environment) The environment to learn from
-        :param model: (Model) The model to learn
-        :param n_steps: (int) The number of steps to run for each environment
-        :param gamma: (float) Discount factor
-        """
-        super(myA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
-        self.gamma = gamma
-        self.env_name = env_name
-
-    def run(self):
-        """
-        Run a learning step of the model
-
-        :return: ([float], [float], [float], [bool], [float], [float])
-                 observations, states, rewards, masks, actions, values
-        """
-        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
-        mb_states = self.states
-        for _ in range(self.n_steps):
-            actions, values, _ = self.model.step(self.env_name, self.obs)
-            if isinstance(self.env.action_space, gym.spaces.Discrete):
-                actions = np.clip(actions, 0, self.env.action_space.n)
-            mb_obs.append(np.copy(self.obs))
-            mb_actions.append(actions)
-            mb_values.append(values)
-            mb_dones.append(self.dones)
-
-            obs, rewards, dones, _ = self.env.step(actions)
-            self.dones = dones
-            self.obs = obs
-            mb_rewards.append(rewards)
-
-        mb_dones.append(self.dones)
-        # batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype).swapaxes(1, 0).reshape(self.batch_ob_shape)
-        mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
-        mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(0, 1)
-        mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(0, 1)
-        mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
-        mb_masks = mb_dones[:, :-1]
-        mb_dones = mb_dones[:, 1:]
-        true_rewards = np.copy(mb_rewards)
-        last_values = self.model.value(self.env_name, self.obs).tolist()
-        # discount/bootstrap off value fn
-        for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
-            rewards = rewards.tolist()
-            dones = dones.tolist()
-            if dones[-1] == 0:
-                rewards = discount_with_dones(rewards + [value], dones + [0], self.gamma)[:-1]
-            else:
-                rewards = discount_with_dones(rewards, dones, self.gamma)
-            mb_rewards[n] = rewards
-
-        # convert from [n_env, n_steps, ...] to [n_steps * n_env, ...]
-        mb_rewards = mb_rewards.reshape(-1, *mb_rewards.shape[2:])
-        mb_actions = mb_actions.reshape(-1, *mb_actions.shape[2:])
-        mb_values = mb_values.reshape(-1, *mb_values.shape[2:])
-        mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])
-        true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
-        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, true_rewards

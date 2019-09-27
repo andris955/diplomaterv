@@ -1,12 +1,14 @@
 from MultiTaskA2C import MultitaskA2C
-from MultiTaskA2C import myA2CRunner
+from runner import myA2CRunner
 from MultiTaskPolicy import MultiTaskA2CPolicy
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
 import global_config
 import datetime
 import os
-
+from logger import Logger
+from collections import namedtuple
+import numpy as np
 
 class Agent:
     def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id):
@@ -17,6 +19,7 @@ class Agent:
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
         self.tbw = None
+        self.train_step = 0
 
         now = str(datetime.datetime.now())[2:16]
         now = now.replace(' ', '_')
@@ -24,6 +27,10 @@ class Agent:
         now = now.replace('-', '_')
         self.initialize_time = now
         self.transfer_id = transfer_id
+
+        self.LogValue = namedtuple("LogValue", "step score policy_loss value_loss")
+
+        self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
 
         self.__setup_environments()
         self.__setup_model()
@@ -47,10 +54,14 @@ class Agent:
         for environment in self.listOfGames:
             self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment], self.model, n_steps=global_config.n_steps, gamma=0.99)
 
-    def train_for_one_episode(self, game):
+    def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
-        score = self.model.multi_task_learn_for_one_episode(game, runner, self.tbw.writer)
-        return score
+        scores, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.tbw.writer)
+        self.train_step += 1
+        if logging:
+            log_value = self.LogValue(step=self.train_step, score=np.mean(scores), policy_loss=policy_loss, value_loss=value_loss)
+            self.logger.log(game, log_value)
+        return scores
 
     @staticmethod
     def play(model_id, max_number_of_games, show_render=False):

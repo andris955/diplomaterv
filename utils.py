@@ -62,6 +62,8 @@ def dir_check():
         os.mkdir('./data/models')
     if not os.path.exists('./data/logs'):
         os.mkdir('./data/logs')
+    if not os.path.exists('./data/logging'):
+        os.mkdir('./data/logging')
     return
 
 if __name__ == '__main__':

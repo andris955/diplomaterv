@@ -1,11 +1,13 @@
 import os
 import pandas as pd
+import global_config
+
 
 class Logger:
     def __init__(self, id, listofgames):
         self.id = id
         self.listofgames = listofgames
-        self.folder_path = os.path.join("./data/logging/", self.id)
+        self.folder_path = os.path.join(global_config.log_path, self.id)
         if not os.path.exists(self.folder_path):
             os.mkdir(self.folder_path)
         self.fields = None
@@ -30,7 +32,7 @@ class Logger:
             if self.pd_data[game] is None:
                 self.pd_data[game] = pd.DataFrame(self.data[game])
             else:
-                print("Hiba")
+                print("Error logger.py")
 
     def log(self, game, values):
         try:

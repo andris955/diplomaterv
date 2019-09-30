@@ -1,34 +1,42 @@
 import global_config
 import numpy as np
-from utils import one_hot
+from utils import one_hot, read_params
 from stable_baselines.common import SetVerbosity
 from Agent import Agent
 
 
-class MultiTasking():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, n_cpus, transfer_id, verbose=1, lam=None, MetaDecider=None):
+class MultiTaskLearning():
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, n_cpus, transfer_id=None, tensorboard_logging=None, verbose=1, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
         :param Algorithm: Chosen multi-task algorithm. Available: 'A5C','EA4C' ...
         """
+        if transfer_id is not None:
+            if SetOfTasks is not None:
+                print("The given set of tasks is overwritten by the tasks used by the referred model (transfer_id).")
+            params = read_params(transfer_id)
+            self.T = params['envs']
+        else:
+            self.T = SetOfTasks
+
         self.algorithm = Algorithm
         self.verbose = verbose
-        ActiveSamplingMultiTaskAgent = Agent(Algorithm, SetOfTasks, global_config.MaxSteps, n_cpus, transfer_id)
-        if self.algorithm == "A5C":
-            self.__A5C_init(SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent)
-        elif self.algorithm == "EA4C":
-            self.__EA4C_init(SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
+        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, global_config.MaxSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
-    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent):
+        if self.algorithm == "A5C":
+            self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent)
+        elif self.algorithm == "EA4C":
+            self.__EA4C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
+
+    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
-        self.T = SetOfTasks
         self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
         assert isinstance(NumberOfEpisodesForEstimating, int), "NumberOfEpisodesForEstimating must be integer"
         self.n = NumberOfEpisodesForEstimating  # Number of episodes which are used for estimating current average performance in any task Ti
-        self.l = l  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
+        self.l = uniform_policy_steps  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
         self.t = MaxSteps  # Total number of training steps for the algorithm
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.a = []  # Average scores for every task
@@ -65,9 +73,8 @@ class MultiTasking():
             self.amta.exit_tbw()
 
     #TODO megcsinálni
-    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, l, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
+    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
-        self.T = SetOfTasks
         self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
@@ -80,7 +87,7 @@ class MultiTasking():
         self.r1 = 0
         self.r2 = 0  # First & second component of the reward for meta-learner, defined in lines 93-94
         self.r = 0  # Reward for meta-learner
-        self.l = l  # Number of tasks to consider in the computation of r2.
+        self.l = uniform_policy_steps  # Number of tasks to consider in the computation of r2.
         self.s_avg = []  # Average scores for every task
         self.amta = ActiveSamplingMultiTaskAgent  # The Active Sampling multi-tasking agent
         self.ma = MetaLearningAgent # Meta Learning Agent.

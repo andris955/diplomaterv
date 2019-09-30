@@ -23,6 +23,8 @@ import json
 import utils
 import tf_util
 
+from episode_reward import EpisodeRewardCalculator
+
 
 class BaseMultitaskRLModel(ABC):
     """
@@ -345,6 +347,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         self.step = None
         self.proba_step = None
         self.trainable_variables = None
+        self.transfer_id = []
 
     @abstractmethod
     def setup_model(self, transfer=False):
@@ -450,6 +453,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
+        model.transfer_id.append(model_id)
         # model.__dict__.update(kwargs)
 
         envs = [key for key in params['action_space_dict'].keys()]
@@ -543,7 +547,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.summary = None
         self.episode_reward = None
         self.updates = None
-        self.transfer_id = None
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
@@ -551,7 +554,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
     def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, seed=3):
         _ = self._init_num_timesteps(True)
-        tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
 
         self._setup_learn(seed)
 
@@ -560,6 +562,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.episode_reward = {}
         for key in self.env_dict.keys():
             self.episode_reward[key] = np.zeros((self.n_envs,))
+
+        tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
+
+        if tbw is not None:
+            self.episode_reward = EpisodeRewardCalculator([key for key in self.env_dict.keys()], self.n_envs, tbw.writer)
+        else:
+            self.episode_reward = EpisodeRewardCalculator([key for key in self.env_dict.keys()], self.n_envs, None)
 
         return tbw
 
@@ -689,9 +698,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
-        if states is not None:
-            td_map[self.train_model.states_ph] = states
-            td_map[self.train_model.masks_ph] = masks
+
+        # if states is not None:
+        #     td_map[self.train_model.states_ph] = states
+        #     td_map[self.train_model.masks_ph] = masks
 
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
@@ -713,8 +723,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         return policy_loss, value_loss, policy_entropy
 
-    def multi_task_learn_for_one_episode(self, game, runner, writer, callback=None, seed=None, log_interval=100, tb_log_name="A2C",
-                                         reset_num_timesteps=True):
+    def multi_task_learn_for_one_episode(self, game, runner, writer, log_interval=100):
 
         t_start = time.time()
         # true_reward is the reward without discount
@@ -724,19 +733,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
-        if writer is not None:
-            self.episode_reward[game] = utils.total_episode_reward_logger(game, self.episode_reward[game],
-                                                                          true_rewards.reshape((self.n_envs, self.n_steps)),
-                                                                          masks.reshape((self.n_envs, self.n_steps)),
-                                                                          writer, self.num_timesteps)
+        ep_reward = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
 
         self.num_timesteps += self.n_batch
-
-        if callback is not None:
-            # Only stop training if return value is False, not when it is None. This is for backwards
-            # compatibility with callbacks that have no return statement.
-            if callback(locals(), globals()) is False:
-                return self
 
         if self.verbose >= 1 and (self.updates % log_interval == 0):
             explained_var = explained_variance(values, rewards)
@@ -748,7 +747,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             logger.record_tabular("explained_variance", float(explained_var))
             logger.dump_tabular()
 
-        return self.episode_reward[game], policy_loss, value_loss
+        return ep_reward, policy_loss, value_loss
 
     def save(self, save_path):
         params = {
@@ -770,6 +769,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
+            'transfer_id': self.transfer_id,
             "policy_kwargs": self.policy_kwargs
         }
 

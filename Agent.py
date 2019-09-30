@@ -11,7 +11,7 @@ from collections import namedtuple
 import numpy as np
 
 class Agent:
-    def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id):
+    def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id, tensorboard_logging):
         self.algorithm = algorithm
         self.listOfGames = listOfGames
         self.max_steps = max_steps
@@ -19,7 +19,9 @@ class Agent:
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
         self.tbw = None
+        self.writer = None
         self.train_step = 0
+        self.tb_log = tensorboard_logging
 
         now = str(datetime.datetime.now())[2:16]
         now = now.replace(' ', '_')
@@ -28,9 +30,12 @@ class Agent:
         self.initialize_time = now
         self.transfer_id = transfer_id
 
-        self.LogValue = namedtuple("LogValue", "step score policy_loss value_loss")
+        self.LogValue = namedtuple("LogValue", "step scores policy_loss value_loss")
 
-        self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
+        if transfer_id:
+            self.logger = Logger(transfer_id, self.listOfGames)
+        else:
+            self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
 
         self.__setup_environments()
         self.__setup_model()
@@ -44,10 +49,12 @@ class Agent:
 
     def __setup_model(self):
         if self.transfer_id is None:
-            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log="./data/logs", full_tensorboard_log=True, n_steps=global_config.n_steps)
+            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log=self.tb_log, full_tensorboard_log=(self.tb_log is not None), n_steps=global_config.n_steps)
         else:
             self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
         self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_steps, self.initialize_time)
+        if self.tbw is not None:
+            self.writer = self.tbw.writer
 
     def __setup_runners(self):
         self.runners = {}
@@ -56,12 +63,15 @@ class Agent:
 
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
-        scores, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.tbw.writer)
+        ep_rewards, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
         self.train_step += 1
         if logging:
-            log_value = self.LogValue(step=self.train_step, score=np.mean(scores), policy_loss=policy_loss, value_loss=value_loss)
+            log_value = self.LogValue(step=self.train_step, scores=ep_rewards, policy_loss=policy_loss, value_loss=value_loss)
             self.logger.log(game, log_value)
-        return scores
+            if self.train_step % 100 == 0:
+                self.logger.dump()
+
+        return ep_rewards
 
     @staticmethod
     def play(model_id, max_number_of_games, show_render=False):
@@ -89,7 +99,7 @@ class Agent:
                 os.mkdir("./data/models/" + self.algorithm + '_' + self.initialize_time)
             self.model.save("./data/models/" + self.algorithm + '_' + self.initialize_time)
         except:
-            print("Error at saving the model")
+            print("Error saving the model")
 
     def exit_tbw(self):
         if self.tbw is not None:

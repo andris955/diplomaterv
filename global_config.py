@@ -53,6 +53,8 @@ tau = 1
 n_steps = 5
 model_id = "A5C_19_09_24_08_04"
 
+logging_frequency = 1000
+
 tensorboard_log = "./data/tb_logs"
 
 log_path = "./data/logs"

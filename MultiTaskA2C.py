@@ -733,7 +733,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         n_seconds = time.time() - t_start
         fps = int(self.n_batch / n_seconds)
 
-        ep_reward = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
+        ep_rewards = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
 
         self.num_timesteps += self.n_batch
 
@@ -747,7 +747,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             logger.record_tabular("explained_variance", float(explained_var))
             logger.dump_tabular()
 
-        return ep_reward, policy_loss, value_loss
+        return ep_rewards, policy_loss, value_loss
 
     def save(self, save_path):
         params = {

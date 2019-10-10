@@ -9,6 +9,7 @@ import os
 from logger import Logger
 from collections import namedtuple
 import numpy as np
+import time
 
 class Agent:
     def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id, tensorboard_logging):
@@ -30,12 +31,16 @@ class Agent:
         self.initialize_time = now
         self.transfer_id = transfer_id
 
-        self.LogValue = namedtuple("LogValue", "step scores policy_loss value_loss")
+        self.start_time = time.time()
+
+        self.LogValue = namedtuple("LogValue", "elapsed_time step scores policy_loss value_loss")
 
         if transfer_id:
             self.logger = Logger(transfer_id, self.listOfGames)
         else:
             self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
+
+        self.old_ep_reward = 0
 
         self.__setup_environments()
         self.__setup_model()
@@ -64,11 +69,16 @@ class Agent:
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
         ep_rewards, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
+        # mean_ep_reward = np.mean(ep_rewards)
         self.train_step += 1
         if logging:
-            log_value = self.LogValue(step=self.train_step, scores=ep_rewards, policy_loss=policy_loss, value_loss=value_loss)
+            if self.old_ep_reward > ep_rewards[0]: # csak epizódok végén kell logolni az ep_rewardot
+                log_value = self.LogValue(elapsed_time=time.time()-self.start_time, step=self.train_step, scores=ep_rewards[0], policy_loss=policy_loss, value_loss=value_loss)
+            else:
+                log_value = self.LogValue(elapsed_time=time.time()-self.start_time, step=self.train_step, scores=-1, policy_loss=policy_loss, value_loss=value_loss)
+            self.old_ep_reward = ep_rewards[0]
             self.logger.log(game, log_value)
-            if self.train_step % 100 == 0:
+            if self.train_step % global_config.logging_frequency == 0:
                 self.logger.dump()
 
         return ep_rewards

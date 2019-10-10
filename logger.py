@@ -32,7 +32,7 @@ class Logger:
             if self.pd_data[game] is None:
                 self.pd_data[game] = pd.DataFrame(self.data[game])
             else:
-                print("Error logger.py")
+                print("Error in logger.py")
 
     def log(self, game, values):
         try:

@@ -22,7 +22,7 @@ class MultiTaskLearning():
 
         self.algorithm = Algorithm
         self.verbose = verbose
-        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, global_config.MaxSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
+        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, MaxSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
         if self.algorithm == "A5C":
             self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent)

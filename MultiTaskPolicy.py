@@ -8,10 +8,8 @@ from stable_baselines.common.distributions import make_proba_dist_type, Categori
 from stable_baselines.common.input import observation_input
 
 
-def cnn_from_paper(scaled_images, **kwargs):
+def shared_network(scaled_images, **kwargs):
     """
-    CNN from the Multi task paper.
-
     N: number of images in the batch
     H: height of the image
     W: width of the image
@@ -194,7 +192,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
 
 class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, cnn_extractor=cnn_from_paper, **kwargs):
+    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, cnn_extractor=shared_network, **kwargs):
         super(MultiTaskA2CPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=True)
 
         with tf.variable_scope("shared_model", reuse=reuse):

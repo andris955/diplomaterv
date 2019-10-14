@@ -8,8 +8,8 @@ import datetime
 import os
 from logger import Logger
 from collections import namedtuple
-import numpy as np
 import time
+
 
 class Agent:
     def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id, tensorboard_logging):
@@ -73,8 +73,6 @@ class Agent:
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
         ep_rewards, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
-        # print("{} reward: {}".format(game, ep_rewards[0]))
-        # mean_ep_reward = np.mean(ep_rewards)
         self.total_train_step += 1
         self.train_step[game] += 1
         if logging:

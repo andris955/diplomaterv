@@ -631,16 +631,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
-                    # tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
-                    # tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
-                    # if self.full_tensorboard_log:
-                        # tf.summary.histogram('discounted_rewards', self.rewards_ph)
-                        # tf.summary.histogram('learning_rate', self.learning_rate_ph)
-                        # tf.summary.histogram('advantage', self.advs_ph)
-                        # if tf_util.is_image(self.observation_space):
-                        #     tf.summary.image('observation', train_model.obs_ph)
-                        # else:
-                        #     tf.summary.histogram('observation', train_model.obs_ph)
 
                 optimizers = {}
                 grads_and_vars = {}
@@ -688,9 +678,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         """
         advs = rewards - values
 
-        cur_lr = None
-        for _ in range(len(obs)):
-            cur_lr = self.learning_rate_schedule.value()
+        cur_lr = self.learning_rate_schedule.value()
         assert cur_lr is not None, "Error: the observation input array cannon be empty"
 
         if writer is not None and (self.num_timesteps % 1000 == 0):

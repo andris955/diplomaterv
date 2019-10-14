@@ -6,12 +6,12 @@ import json
 
 def one_hot(k, n):
     """
-    :param n: Index of the 1.
-    :param k: Length of the one hot
+    :param k: Index of the 1.
+    :param n: Length of the one hot
     :return: A one-hot np array.
     """
-    v = np.zeros(k)
-    v[n] = 1
+    v = np.zeros(n)
+    v[k] = 1
     return v
 
 

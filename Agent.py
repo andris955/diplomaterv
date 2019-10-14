@@ -21,8 +21,8 @@ class Agent:
         self.policy = MultiTaskA2CPolicy
         self.tbw = None
         self.writer = None
-        self.train_step = 0
         self.tb_log = tensorboard_logging
+        self.total_train_step = 0
 
         now = str(datetime.datetime.now())[2:16]
         now = now.replace(' ', '_')
@@ -33,14 +33,18 @@ class Agent:
 
         self.start_time = time.time()
 
-        self.LogValue = namedtuple("LogValue", "elapsed_time step scores policy_loss value_loss")
+        self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step scores policy_loss value_loss")
 
         if transfer_id:
             self.logger = Logger(transfer_id, self.listOfGames)
         else:
             self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
 
-        self.old_ep_reward = 0
+        self.old_ep_reward = {}
+        self.train_step = {}
+        for game in listOfGames:
+            self.old_ep_reward[game] = 0.0
+            self.train_step[game] = 0
 
         self.__setup_environments()
         self.__setup_model()
@@ -69,16 +73,19 @@ class Agent:
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
         ep_rewards, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
+        # print("{} reward: {}".format(game, ep_rewards[0]))
         # mean_ep_reward = np.mean(ep_rewards)
-        self.train_step += 1
+        self.total_train_step += 1
+        self.train_step[game] += 1
         if logging:
-            if self.old_ep_reward > ep_rewards[0]: # csak epizódok végén kell logolni az ep_rewardot
-                log_value = self.LogValue(elapsed_time=time.time()-self.start_time, step=self.train_step, scores=ep_rewards[0], policy_loss=policy_loss, value_loss=value_loss)
-            else:
-                log_value = self.LogValue(elapsed_time=time.time()-self.start_time, step=self.train_step, scores=-1, policy_loss=policy_loss, value_loss=value_loss)
-            self.old_ep_reward = ep_rewards[0]
-            self.logger.log(game, log_value)
-            if self.train_step % global_config.logging_frequency == 0:
+            if self.old_ep_reward[game] > ep_rewards[0]: # csak epizódok végén kell logolni az ep_rewardot
+                log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=self.old_ep_reward[game], policy_loss=policy_loss, value_loss=value_loss)
+                self.logger.log(game, log_value)
+            elif self.train_step[game] % 10 == 0:
+                log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=-1, policy_loss=policy_loss, value_loss=value_loss)
+                self.logger.log(game, log_value)
+            self.old_ep_reward[game] = ep_rewards[0]
+            if self.total_train_step % global_config.logging_frequency == 0:
                 self.logger.dump()
 
         return ep_rewards

@@ -1,15 +1,74 @@
 import warnings
 from itertools import zip_longest
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import numpy as np
 import tensorflow as tf
-from gym.spaces import Discrete
 
-from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm
-from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution, \
-    MultiCategoricalProbabilityDistribution, DiagGaussianProbabilityDistribution, BernoulliProbabilityDistribution
-from stable_baselines.common.input import observation_input
+from stable_baselines.a2c.utils import linear, batch_to_seq, seq_to_batch, lstm
+from stable_baselines.common.distributions import CategoricalProbabilityDistribution, CategoricalProbabilityDistributionType
+
+from keras import backend as K
+
+def mlp_extractor(flat_observations, net_arch, act_fun):
+    """
+    Constructs an MLP that receives observations as an input and outputs a latent representation for the policy and
+    a value network. The ``net_arch`` parameter allows to specify the amount and size of the hidden layers and how many
+    of them are shared between the policy network and the value network. It is assumed to be a list with the following
+    structure:
+
+    1. An arbitrary length (zero allowed) number of integers each specifying the number of units in a shared layer.
+       If the number of ints is zero, there will be no shared layers.
+    2. An optional dict, to specify the following non-shared layers for the value network and the policy network.
+       It is formatted like ``dict(vf=[<value layer sizes>], pi=[<policy layer sizes>])``.
+       If it is missing any of the keys (pi or vf), no non-shared layers (empty list) is assumed.
+
+    For example to construct a network with one shared layer of size 55 followed by two non-shared layers for the value
+    network of size 255 and a single non-shared layer of size 128 for the policy network, the following layers_spec
+    would be used: ``[55, dict(vf=[255, 255], pi=[128])]``. A simple shared network topology with two layers of size 128
+    would be specified as [128, 128].
+
+    :param flat_observations: (tf.Tensor) The observations to base policy and value function on.
+    :param net_arch: ([int or dict]) The specification of the policy and value networks.
+        See above for details on its formatting.
+    :param act_fun: (tf function) The activation function to use for the networks.
+    :return: (tf.Tensor, tf.Tensor) latent_policy, latent_value of the specified network.
+        If all layers are shared, then ``latent_policy == latent_value``
+    """
+    latent = flat_observations
+    policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
+    value_only_layers = []  # Layer sizes of the network that only belongs to the value network
+
+    # Iterate through the shared layers and build the shared parts of the network
+    for idx, layer in enumerate(net_arch):
+        if isinstance(layer, int):  # Check that this is a shared layer
+            layer_size = layer
+            latent = act_fun(linear(latent, "shared_fc{}".format(idx), layer_size, init_scale=np.sqrt(2)))
+        else:
+            assert isinstance(layer, dict), "Error: the net_arch list can only contain ints and dicts"
+            if 'pi' in layer:
+                assert isinstance(layer['pi'], list), "Error: net_arch[-1]['pi'] must contain a list of integers."
+                policy_only_layers = layer['pi']
+
+            if 'vf' in layer:
+                assert isinstance(layer['vf'], list), "Error: net_arch[-1]['vf'] must contain a list of integers."
+                value_only_layers = layer['vf']
+            break  # From here on the network splits up in policy and value network
+
+    # Build the non-shared part of the network
+    latent_policy = latent
+    latent_value = latent
+    for idx, (pi_layer_size, vf_layer_size) in enumerate(zip_longest(policy_only_layers, value_only_layers)):
+        if pi_layer_size is not None:
+            assert isinstance(pi_layer_size, int), "Error: net_arch[-1]['pi'] must only contain integers."
+            latent_policy = act_fun(linear(latent_policy, "pi_fc{}".format(idx), pi_layer_size, init_scale=np.sqrt(2)))
+
+        if vf_layer_size is not None:
+            assert isinstance(vf_layer_size, int), "Error: net_arch[-1]['vf'] must only contain integers."
+            latent_value = act_fun(linear(latent_value, "vf_fc{}".format(idx), vf_layer_size, init_scale=np.sqrt(2)))
+
+    return latent_policy, latent_value
+
 
 class MetaBasePolicy(ABC):
     """
@@ -20,7 +79,7 @@ class MetaBasePolicy(ABC):
     :param ac_space: (Gym Space) The action space of the environment
     :param n_env: (int) The number of environments to run
     :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batches to run (n_envs * n_steps)
+    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
     :param scale: (bool) whether or not to scale the input
     :param obs_phs: (TensorFlow Tensor, TensorFlow Tensor) a tuple containing an override for observation placeholder
@@ -28,31 +87,33 @@ class MetaBasePolicy(ABC):
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
 
-    recurrent = False
-
     def __init__(self, sess, input_length, output_length, n_steps, n_batch):
         self.n_steps = n_steps
-        self.n_batch = n_batch
         self.input_length = input_length
-        self.output_length = input_length
+        self.output_length = output_length
+        self.n_batch = n_batch
         with tf.variable_scope("input", reuse=False):
-            self._input_ph = tf.placeholder(shape=(self.n_steps, self.input_length), dtype=tf.int32, name="input_ph")
+            self.input_ph = tf.placeholder(shape=(n_batch, 1), dtype=tf.float32, name="input_ph")
         self.sess = sess
 
-    def initial_state(self):
+    @staticmethod
+    def _kwargs_check(feature_extraction, kwargs):
         """
-        The initial state of the policy. For feedforward policies, None. For a recurrent policy,
-        a NumPy array of shape (self.n_env, ) + state_shape.
+        Ensure that the user is not passing wrong keywords
+        when using policy_kwargs.
+
+        :param feature_extraction: (str)
+        :param kwargs: (dict)
         """
-        assert not self.recurrent, "When using recurrent policies, you must overwrite `initial_state()` method"
-        return None
+        # When using policy_kwargs parameter on model creation,
+        # all keywords arguments must be consumed by the policy constructor except
+        # the ones for the cnn_extractor network (cf nature_cnn()), where the keywords arguments
+        # are not passed explicitely (using **kwargs to forward the arguments)
+        # that's why there should be not kwargs left when using the mlp_extractor
+        # (in that case the keywords arguments are passed explicitely)
+        if feature_extraction == 'mlp' and len(kwargs) > 0:
+            raise ValueError("Unknown keywords for policy: {}".format(kwargs))
 
-    @property
-    def input_ph(self):
-        """tf.Tensor: placeholder for observations, shape (self.n_batch, ) + self.input_length."""
-        return self._input_ph
-
-    @abstractmethod
     def step(self, obs, state=None, mask=None):
         """
         Returns the policy for a single step
@@ -64,7 +125,6 @@ class MetaBasePolicy(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def proba_step(self, obs, state=None, mask=None):
         """
         Returns the action probability for a single step
@@ -93,12 +153,12 @@ class MetaActorCriticPolicy(MetaBasePolicy):
 
     def __init__(self, sess, input_length, output_length, n_steps, n_batch):
         super(MetaActorCriticPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch)
-        self._pdtype = make_proba_dist_type(input_length)
-        self._policy = None
-        self._proba_distribution = None
-        self._value_fn = None
-        self._action = None
-        self._deterministic_action = None
+        self.pdtype = CategoricalProbabilityDistributionType(self.output_length)
+        self.policy = None
+        self.proba_distribution = None
+        self.value_fn = None
+        self.deterministic_action = None
+        self.initial_state = None
 
     def _setup_init(self):
         """
@@ -106,68 +166,15 @@ class MetaActorCriticPolicy(MetaBasePolicy):
         """
         with tf.variable_scope("output", reuse=True):
             assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
-            self._action = self.proba_distribution.sample()
-            self._deterministic_action = self.proba_distribution.mode()
-            self._neglogp = self.proba_distribution.neglogp(self.action)
+            self.action = self.proba_distribution.sample()
+            self.deterministic_action = self.proba_distribution.mode()
+            self.neglogp = self.proba_distribution.neglogp(self.action)
             if isinstance(self.proba_distribution, CategoricalProbabilityDistribution):
-                self._policy_proba = tf.nn.softmax(self.policy)
-            elif isinstance(self.proba_distribution, DiagGaussianProbabilityDistribution):
-                self._policy_proba = [self.proba_distribution.mean, self.proba_distribution.std]
-            elif isinstance(self.proba_distribution, BernoulliProbabilityDistribution):
-                self._policy_proba = tf.nn.sigmoid(self.policy)
-            elif isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
-                self._policy_proba = [tf.nn.softmax(categorical.flatparam())
-                                      for categorical in self.proba_distribution.categoricals]
+                self.policy_proba = tf.nn.softmax(self.policy)
             else:
-                self._policy_proba = []  # it will return nothing, as it is not implemented
-            self._value_flat = self.value_fn[:, 0]
+                self.policy_proba = []  # it will return nothing, as it is not implemented
+            self._value = self.value_fn[:, 0]
 
-    @property
-    def pdtype(self):
-        """ProbabilityDistributionType: type of the distribution for stochastic actions."""
-        return self._pdtype
-
-    @property
-    def policy(self):
-        """tf.Tensor: policy output, e.g. logits."""
-        return self._policy
-
-    @property
-    def proba_distribution(self):
-        """ProbabilityDistribution: distribution of stochastic actions."""
-        return self._proba_distribution
-
-    @property
-    def value_fn(self):
-        """tf.Tensor: value estimate, of shape (self.n_batch, 1)"""
-        return self._value_fn
-
-    @property
-    def value_flat(self):
-        """tf.Tensor: value estimate, of shape (self.n_batch, )"""
-        return self._value_flat
-
-    @property
-    def action(self):
-        """tf.Tensor: stochastic action, of shape (self.n_batch, ) + self.ac_space.shape."""
-        return self._action
-
-    @property
-    def deterministic_action(self):
-        """tf.Tensor: deterministic action, of shape (self.n_batch, ) + self.ac_space.shape."""
-        return self._deterministic_action
-
-    @property
-    def neglogp(self):
-        """tf.Tensor: negative log likelihood of the action sampled by self.action."""
-        return self._neglogp
-
-    @property
-    def policy_proba(self):
-        """tf.Tensor: parameters of the probability distribution. Depends on pdtype."""
-        return self._policy_proba
-
-    @abstractmethod
     def step(self, obs, state=None, mask=None, deterministic=False):
         """
         Returns the policy for a single step
@@ -180,7 +187,17 @@ class MetaActorCriticPolicy(MetaBasePolicy):
         """
         raise NotImplementedError
 
-    @abstractmethod
+    def proba_step(self, obs, state=None, mask=None):
+        """
+        Returns the action probability for a single step
+
+        :param obs: ([float] or [int]) The current observation of the environment
+        :param state: ([float]) The last states (used in recurrent policies)
+        :param mask: ([float]) The last masks (used in recurrent policies)
+        :return: ([float]) the action probability
+        """
+        raise NotImplementedError
+
     def value(self, obs, state=None, mask=None):
         """
         Returns the value for a single step
@@ -193,60 +210,7 @@ class MetaActorCriticPolicy(MetaBasePolicy):
         raise NotImplementedError
 
 
-class MetaRecurrentActorCriticPolicy(MetaActorCriticPolicy):
-    """
-    Actor critic policy object uses a previous state in the computation for the current step.
-    NOTE: this class is not limited to recurrent neural network policies,
-    see https://github.com/hill-a/stable-baselines/issues/241
-
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param state_shape: (tuple<int>) shape of the per-environment state space.
-    :param reuse: (bool) If the policy is reusable or not
-    :param scale: (bool) whether or not to scale the input
-    """
-
-    recurrent = True
-
-    def __init__(self, sess, input_length, output_length, n_steps, n_batch, state_shape):
-        super(MetaRecurrentActorCriticPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch)
-
-        with tf.variable_scope("input", reuse=False):
-            self._dones_ph = tf.placeholder(tf.float32, (n_batch,), name="dones_ph")  # (done t-1)
-            state_ph_shape = (self.n_env,) + tuple(state_shape)
-            self._states_ph = tf.placeholder(tf.float32, state_ph_shape, name="states_ph")
-
-        initial_state_shape = (self.n_env,) + tuple(state_shape)
-        self._initial_state = np.zeros(initial_state_shape, dtype=np.float32)
-
-    @property
-    def initial_state(self):
-        return self._initial_state
-
-    @property
-    def dones_ph(self):
-        """tf.Tensor: placeholder for whether episode has terminated (done), shape (self.n_batch, ).
-        Internally used to reset the state before the next episode starts."""
-        return self._dones_ph
-
-    @property
-    def states_ph(self):
-        """tf.Tensor: placeholder for states, shape (self.n_env, ) + state_shape."""
-        return self._states_ph
-
-    @abstractmethod
-    def value(self, obs, state=None, mask=None):
-        """
-        Cf base class doc.
-        """
-        raise NotImplementedError
-
-
-class MetaLstmPolicy(MetaRecurrentActorCriticPolicy):
+class MetaLstmPolicyActorCriticPolicy(MetaActorCriticPolicy):
     """
     Policy object that implements actor critic, using LSTMs.
 
@@ -268,15 +232,18 @@ class MetaLstmPolicy(MetaRecurrentActorCriticPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    recurrent = True
+    def __init__(self, sess,  input_length, output_length, n_steps, n_batch, net_arch=None, act_fun=tf.tanh, layer_norm=False):
+        super(MetaLstmPolicyActorCriticPolicy, self).__init__(sess,  input_length, output_length, n_steps, n_batch)
 
-    def __init__(self, sess, input_length, output_length, n_steps, n_batch, n_lstm=256, layers=None,
-                 net_arch=None, act_fun=tf.tanh, layer_norm=False):
-        # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
-        super(MetaLstmPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch, state_shape=(2 * n_lstm,))
+        K.set_session(self.sess)
+        n_lstm = 3*input_length # TODO ???
+        with tf.variable_scope("input", reuse=True):
+            self.masks_ph = tf.placeholder(tf.float32, [n_batch], name="masks_ph")  # mask (done t-1)
+            # n_lstm * 2 dim because of the cell and hidden states of the LSTM
+            self.states_ph = tf.placeholder(tf.float32, [n_batch, n_lstm], name="states_ph")  # states
 
-        with tf.variable_scope("model", reuse=False):
-            latent = tf.layers.flatten(self.processed_obs)
+        with tf.variable_scope("model", reuse=True):
+            latent = tf.layers.flatten(self.input_ph)
             policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
             value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
@@ -289,10 +256,7 @@ class MetaLstmPolicy(MetaRecurrentActorCriticPolicy):
                 elif layer == "lstm":
                     if lstm_layer_constructed:
                         raise ValueError("The net_arch parameter must only contain one occurrence of 'lstm'!")
-                    input_sequence = batch_to_seq(latent, self.n_env, n_steps)
-                    masks = batch_to_seq(self.dones_ph, self.n_env, n_steps)
-                    rnn_output, self.snew = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm,
-                                                 layer_norm=layer_norm)
+                    rnn_output = tf.keras.layers.LSTM(n_lstm)(latent)
                     latent = seq_to_batch(rnn_output)
                     lstm_layer_constructed = True
                 else:
@@ -330,28 +294,25 @@ class MetaLstmPolicy(MetaRecurrentActorCriticPolicy):
             if not lstm_layer_constructed:
                 raise ValueError("The net_arch parameter must contain at least one occurrence of 'lstm'!")
 
-            self._value_fn = linear(latent_value, 'vf', 1)
+            self.value_fn = linear(latent_value, 'vf', 1)
             # TODO: why not init_scale = 0.001 here like in the feedforward
-            self._proba_distribution, self._policy, self.q_value = \
+            self.proba_distribution, self.policy, self.q_value = \
                 self.pdtype.proba_distribution_from_latent(latent_policy, latent_value)
+        self.initial_state = np.zeros((self.n_batch, n_lstm * 2), dtype=np.float32)
         self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
-        if deterministic:
-            return self.sess.run([self.deterministic_action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
-        else:
-            return self.sess.run([self.action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+    def step(self, input_vector, state=None, mask=None, deterministic=False):
+        return self.sess.run([self.deterministic_action, self._value, self.snew, self.neglogp],
+                             {self.input_ph: input_vector, self.states_ph: state})
 
     def proba_step(self, obs, state=None, mask=None):
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
 
     def value(self, obs, state=None, mask=None):
-        return self.sess.run(self.value_flat, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+        return self.sess.run(self._value, {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
 
 
-class MetaMlpLstmPolicy(MetaLstmPolicy):
+class MlpMetaLstmPolicy(MetaLstmPolicyActorCriticPolicy):
     """
     Policy object that implements actor critic, using LSTMs with a MLP feature extraction
 
@@ -366,11 +327,11 @@ class MetaMlpLstmPolicy(MetaLstmPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, input_length, output_length, n_steps, n_batch, n_lstm=256):
-        super(MetaMlpLstmPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch, n_lstm, layer_norm=False)
+    def __init__(self, sess,  input_length, output_length, n_steps, n_batch, n_lstm=256):
+        super(MlpMetaLstmPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch, n_lstm, layer_norm=False)
 
 
-class MetaMlpLnLstmPolicy(MetaLstmPolicy):
+class MlpLnMetaLstmPolicy(MetaLstmPolicyActorCriticPolicy):
     """
     Policy object that implements actor critic, using a layer normalized LSTMs with a MLP feature extraction
 
@@ -386,4 +347,4 @@ class MetaMlpLnLstmPolicy(MetaLstmPolicy):
     """
 
     def __init__(self, sess, input_length, output_length, n_steps, n_batch, n_lstm=256):
-        super(MetaMlpLnLstmPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch, n_lstm, layer_norm=True)
+        super(MlpLnMetaLstmPolicy, self).__init__(sess, input_length, output_length, n_steps, n_batch, n_lstm, layer_norm=True)

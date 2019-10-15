@@ -10,7 +10,7 @@ if __name__ == '__main__':
     env = gym.make('SpaceInvaders-v0')
     env = DummyVecEnv([lambda: env])  # The algorithms require a vectorized environment to run
     #
-    # model = A2C(MlpLstmPolicy, env, verbose=1)
+    # model = A2C(MlpMetaLstmPolicy, env, verbose=1)
     # model.learn(total_timesteps=10000)
     #
     # obs = env.reset()

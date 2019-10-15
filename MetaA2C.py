@@ -15,7 +15,7 @@ class MetaA2CModel:
     """
     The Meta A2C (Advantage Actor Critic) model class
 
-    :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
+    :param policy: (MetaActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnMetaLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
     :param vf_coef: (float) Value function coefficient for the loss calculation
@@ -90,7 +90,7 @@ class MetaA2CModel:
 
 
         assert issubclass(self.policy, MetaActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                           "instance of common.policies.ActorCriticPolicy."
+                                                           "instance of common.policies.MetaActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():

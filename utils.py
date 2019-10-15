@@ -31,6 +31,130 @@ def read_params(transfer_id):
     return params
 
 
+def constant(_):
+    """
+    Returns a constant value for the Scheduler
+
+    :param _: ignored
+    :return: (float) 1
+    """
+    return 1.
+
+
+def linear_schedule(progress):
+    """
+    Returns a linear value for the Scheduler
+
+    :param progress: (float) Current progress status (in [0, 1])
+    :return: (float) 1 - progress
+    """
+    return 1 - progress
+
+
+def middle_drop(progress):
+    """
+    Returns a linear value with a drop near the middle to a constant value for the Scheduler
+
+    :param progress: (float) Current progress status (in [0, 1])
+    :return: (float) 1 - progress if (1 - progress) >= 0.75 else 0.075
+    """
+    eps = 0.75
+    if 1 - progress < eps:
+        return eps * 0.1
+    return 1 - progress
+
+
+def double_linear_con(progress):
+    """
+    Returns a linear value (x2) with a flattened tail for the Scheduler
+
+    :param progress: (float) Current progress status (in [0, 1])
+    :return: (float) 1 - progress*2 if (1 - progress*2) >= 0.125 else 0.125
+    """
+    progress *= 2
+    eps = 0.125
+    if 1 - progress < eps:
+        return eps
+    return 1 - progress
+
+
+def double_middle_drop(progress):
+    """
+    Returns a linear value with two drops near the middle to a constant value for the Scheduler
+
+    :param progress: (float) Current progress status (in [0, 1])
+    :return: (float) if 0.75 <= 1 - p: 1 - p, if 0.25 <= 1 - p < 0.75: 0.75, if 1 - p < 0.25: 0.125
+    """
+    eps1 = 0.75
+    eps2 = 0.25
+    if 1 - progress < eps1:
+        if 1 - progress < eps2:
+            return eps2 * 0.5
+        return eps1 * 0.1
+    return 1 - progress
+
+
+SCHEDULES = {
+    'linear': linear_schedule,
+    'constant': constant,
+    'double_linear_con': double_linear_con,
+    'middle_drop': middle_drop,
+    'double_middle_drop': double_middle_drop
+}
+
+
+class Scheduler(object):
+    def __init__(self, initial_value, n_values, schedule):
+        """
+        Update a value every iteration, with a specific curve
+
+        :param initial_value: (float) initial value
+        :param n_values: (int) the total number of iterations
+        :param schedule: (function) the curve you wish to follow for your value
+        """
+        self.step = 0.
+        self.initial_value = initial_value
+        self.nvalues = n_values
+        self.schedule = SCHEDULES[schedule]
+
+    def value(self):
+        """
+        Update the Scheduler, and return the current value
+
+        :return: (float) the current value
+        """
+        schedule = self.schedule(self.step / self.nvalues)
+        if schedule < 0.05:
+            schedule = 0.05
+        current_value = self.initial_value * schedule
+        self.step += 1.
+        return current_value
+
+    def value_steps(self, steps):
+        """
+        Get a value for a given step
+
+        :param steps: (int) The current number of iterations
+        :return: (float) the value for the current number of iterations
+        """
+        return self.initial_value * self.schedule(steps / self.nvalues)
+
+
+def find_trainable_variables(key):
+    """
+    Returns the trainable variables within a given scope
+    :param key: (str) The variable scope
+    :return: ([TensorFlow Tensor]) the trainable variables
+
+    - **removed** ``a2c.utils.find_trainable_params`` please use ``common.tf_util.get_trainable_vars`` instead.
+  ``find_trainable_params`` was returning all trainable variables, discarding the scope argument.
+  This bug was causing the model to save duplicated parameters (for DDPG and SAC)
+  but did not affect the performance.
+    """
+    with tf.variable_scope(key):
+        return tf.trainable_variables()
+
+
 def dir_check():
     if not os.path.exists('./data'):
         os.mkdir('./data')

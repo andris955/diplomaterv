@@ -6,7 +6,7 @@ from Agent import Agent
 
 
 class MultiTaskLearning():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, n_cpus, transfer_id=None, tensorboard_logging=None, verbose=1, lam=None, MetaDecider=None):
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, n_cpus, transfer_id=None, tensorboard_logging=None, verbose=1, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
@@ -22,14 +22,14 @@ class MultiTaskLearning():
 
         self.algorithm = Algorithm
         self.verbose = verbose
-        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, MaxSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
+        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, MaxTrainSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
         if self.algorithm == "A5C":
-            self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent)
+            self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
-            self.__EA4C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
+            self.__EA4C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
 
-    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent):
+    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
         self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
@@ -37,7 +37,7 @@ class MultiTaskLearning():
         assert isinstance(NumberOfEpisodesForEstimating, int), "NumberOfEpisodesForEstimating must be integer"
         self.n = NumberOfEpisodesForEstimating  # Number of episodes which are used for estimating current average performance in any task Ti
         self.l = uniform_policy_steps  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-        self.t = MaxSteps  # Total number of training steps for the algorithm
+        self.t = MaxTrainSteps  # Total number of training steps for the algorithm
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.a = []  # Average scores for every task
         self.m = []
@@ -73,14 +73,14 @@ class MultiTaskLearning():
             self.amta.exit_tbw()
 
     #TODO megcsinálni
-    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
+    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
         self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
         assert isinstance(NumberOfEpisodesForEstimating, int), "NumberOfEpisodesForEstimating must be integer"
         self.n = NumberOfEpisodesForEstimating  # Number of episodes which are used for estimating current average performance in any task Ti
-        self.t = MaxSteps  # Total number of training steps for the algorithm
+        self.t = MaxTrainSteps  # Total number of training steps for the algorithm
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.p = []  # Probability of training on an episode of task Ti next.
         self.c = np.zeros(self.k)  # Count of the number of training episodes of task Ti.

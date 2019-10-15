@@ -12,10 +12,10 @@ import time
 
 
 class Agent:
-    def __init__(self, algorithm, listOfGames, max_steps, n_cpus, transfer_id, tensorboard_logging):
+    def __init__(self, algorithm, listOfGames, MaxTrainSteps, n_cpus, transfer_id, tensorboard_logging):
         self.algorithm = algorithm
         self.listOfGames = listOfGames
-        self.max_steps = max_steps
+        self.max_train_steps = MaxTrainSteps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
@@ -61,7 +61,7 @@ class Agent:
             self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log=self.tb_log, full_tensorboard_log=(self.tb_log is not None), n_steps=global_config.n_steps)
         else:
             self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
-        self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_steps, self.initialize_time)
+        self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_train_steps, self.initialize_time)
         if self.tbw is not None:
             self.writer = self.tbw.writer
 

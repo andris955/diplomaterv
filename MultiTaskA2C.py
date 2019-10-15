@@ -16,12 +16,13 @@ from stable_baselines.common import set_global_seeds
 
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, SetVerbosity
-from stable_baselines.a2c.utils import Scheduler, mse, find_trainable_variables
+from stable_baselines.a2c.utils import mse
 from TensorboardWriter import TensorboardWriter
 
 import json
 import utils
 import tf_util
+import global_config
 
 from episode_reward import EpisodeRewardCalculator
 
@@ -552,12 +553,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         if _init_setup_model:
             self.setup_model()
 
-    def _setup_multitask_learn(self, algorithm, number_of_steps, initialize_time, seed=3):
+    def _setup_multitask_learn(self, algorithm, max_train_steps, initialize_time, seed=3):
         _ = self._init_num_timesteps(True)
 
         self._setup_learn(seed)
 
-        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=number_of_steps,
+        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps,
                                                 schedule=self.lr_schedule)
         self.episode_reward = {}
         for key in self.env_dict.keys():
@@ -584,7 +585,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
                                      n_batch_step, reuse=False, **self.policy_kwargs)
 
-            self.trainable_variables = find_trainable_variables("model")  # a modell betöltéséhez kell.
+            self.trainable_variables = utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
 
     def setup_model(self, transfer=False):
@@ -762,7 +763,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         }
 
         json_params = {
-            'envs': [],
+            "envs": [],
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
@@ -773,13 +774,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
-            # "policy": self.policy,
             "observation_space": self.observation_space.shape,
             "action_space": {},
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
-            'transfer_id': self.transfer_id
-            # "policy_kwargs": self.policy_kwargs
+            "transfer_id": self.transfer_id,
+            "max_training_step": global_config.MaxTrainSteps
+
         }
 
         for game, value in self.action_space_dict.items():

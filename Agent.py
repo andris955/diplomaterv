@@ -9,6 +9,7 @@ import os
 from logger import Logger
 from collections import namedtuple
 import time
+import numpy as np
 
 
 class Agent:
@@ -40,11 +41,12 @@ class Agent:
         else:
             self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
 
-        self.old_ep_reward = {}
         self.train_step = {}
         for game in listOfGames:
-            self.old_ep_reward[game] = 0.0
             self.train_step[game] = 0
+
+        self.episode_learn = 0
+        self.data_available = [False]*len(self.listOfGames)
 
         self.__setup_environments()
         self.__setup_model()
@@ -72,21 +74,18 @@ class Agent:
 
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
-        ep_rewards, policy_loss, value_loss = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
-        self.total_train_step += 1
-        self.train_step[game] += 1
+        ep_scores, policy_loss, value_loss, train_steps = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
         if logging:
-            if self.old_ep_reward[game] > ep_rewards[0]: # csak epizódok végén kell logolni az ep_rewardot
-                log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=self.old_ep_reward[game], policy_loss=policy_loss, value_loss=value_loss)
-                self.logger.log(game, log_value)
-            elif self.train_step[game] % 10 == 0:
-                log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=-1, policy_loss=policy_loss, value_loss=value_loss)
-                self.logger.log(game, log_value)
-            self.old_ep_reward[game] = ep_rewards[0]
-            if self.total_train_step % global_config.logging_frequency == 0:
+            self.episode_learn += 1
+            self.total_train_step += train_steps
+            self.train_step[game] += train_steps
+            log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=np.mean(ep_scores), policy_loss=policy_loss, value_loss=value_loss)
+            self.logger.log(game, log_value)
+            self.data_available[self.listOfGames.index(game)] = True
+            if self.episode_learn % global_config.logging_frequency == 0 and all(self.data_available) is True:
                 self.logger.dump()
 
-        return ep_rewards
+        return ep_scores, train_steps
 
     @staticmethod
     def play(model_id, max_number_of_games, show_render=False):
@@ -108,11 +107,13 @@ class Agent:
                 if show_render is True:
                     env.render()
 
-    def save_model(self):
+    def save_model(self, total_train_steps, performance):
+        base_path = "./data/models/" + self.algorithm + '_' + self.initialize_time
+        name = "{}-{:1.2f}".format(total_train_steps, performance)
         try:
-            if not os.path.exists("./data/models/" + self.algorithm + '_' + self.initialize_time):
-                os.mkdir("./data/models/" + self.algorithm + '_' + self.initialize_time)
-            self.model.save("./data/models/" + self.algorithm + '_' + self.initialize_time)
+            if not os.path.exists(base_path):
+                os.mkdir(base_path)
+            self.model.save(base_path, name)
         except:
             print("Error saving the model")
 

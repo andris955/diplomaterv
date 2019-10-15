@@ -213,7 +213,7 @@ class BaseMultitaskRLModel(ABC):
         pass
 
     @abstractmethod
-    def save(self, save_path):
+    def save(self, save_path, name):
         """
         Save the current parameters to file
 
@@ -228,11 +228,11 @@ class BaseMultitaskRLModel(ABC):
         raise NotImplementedError()
 
     @staticmethod
-    def _save_to_file(save_path, json_params=None, weights=None, params=None):
+    def _save_to_file(save_path, name, json_params=None, weights=None, params=None):
         if isinstance(save_path, str):
             _, ext = os.path.splitext(save_path)
             if ext == "":
-                model_path = os.path.join(save_path, 'model.pkl')
+                model_path = os.path.join(save_path, 'model_' + name + '.pkl')
                 param_path = os.path.join(save_path, 'params.json')
 
                 with open(model_path, "wb") as file_:
@@ -242,7 +242,7 @@ class BaseMultitaskRLModel(ABC):
                     with open(param_path, "w") as file_:
                         json.dump(json_params, file_)
             else:
-                raise ValueError("Error at saving model and parameters")
+                raise ValueError("Error save_path must be a directory path")
 
         else:
             raise ValueError("Error: save_path must be a string")
@@ -444,7 +444,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         return actions_proba
 
     @abstractmethod
-    def save(self, save_path):
+    def save(self, save_path, name):
         pass
 
     @classmethod
@@ -653,7 +653,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.value = step_model.value
                 self.initial_state = step_model.initial_state
 
-                self.trainable_variables = find_trainable_variables("model")
+                self.trainable_variables = utils.find_trainable_variables("model")
 
                 tf.global_variables_initializer().run(session=self.sess)
 
@@ -713,32 +713,60 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         return policy_loss, value_loss, policy_entropy
 
     def multi_task_learn_for_one_episode(self, game, runner, writer, log_interval=100):
+        """
+        Trains until game over.
 
-        t_start = time.time()
-        # true_reward is the reward without discount
-        self.updates = self.num_timesteps // self.n_batch + 1
-        obs, states, rewards, masks, actions, values, true_rewards = runner.run()
-        policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
-        n_seconds = time.time() - t_start
-        fps = int(self.n_batch / n_seconds)
+        :param game: (str) name of the game
+        :param runner: (myA2CRunnner)
+        :param writer: (Tensorboard writer)
+        :param log_interval: (int)
+        :return:
+        """
+        print("-----------------------------------------------------------------")
+        print("---------------------------{}---------------------------".format(game))
 
-        ep_rewards = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
+        mask = [False]*self.n_envs
+        ep_scores = [-1]*self.n_envs
+        policy_loss = value_loss = None
+        train_steps = 0
 
-        self.num_timesteps += self.n_batch
+        while mask != [True]*self.n_envs:
+            t_start = time.time()
+            # true_reward is the reward without discount
+            self.updates = self.num_timesteps // self.n_batch + 1
+            obs, states, rewards, masks, actions, values, true_rewards, dones = runner.run()
+            policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
+            n_seconds = time.time() - t_start
+            fps = int(self.n_batch / n_seconds)
 
-        if self.verbose >= 1 and (self.updates % log_interval == 0):
-            explained_var = explained_variance(values, rewards)
-            logger.record_tabular("updates", self.updates)
-            logger.record_tabular("total_timesteps", self.num_timesteps)
-            logger.record_tabular("fps", fps)
-            logger.record_tabular("policy_entropy", float(policy_entropy))
-            logger.record_tabular("value_loss", float(value_loss))
-            logger.record_tabular("explained_variance", float(explained_var))
-            logger.dump_tabular()
+            tmp_ep_scores = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
 
-        return ep_rewards, policy_loss, value_loss
+            masks_reshaped = masks.reshape((self.n_envs, self.n_steps))
+            assert masks_reshaped.shape[0] == self.n_envs, "dones.shape[0] must be n_envs"
+            for i in range(masks_reshaped.shape[0]):
+                if True in masks_reshaped[i, :]:
+                    mask[i] = True
+                    if ep_scores[i] == -1 and tmp_ep_scores[i] is not None:
+                        ep_scores[i] = tmp_ep_scores[i]
 
-    def save(self, save_path):
+            self.num_timesteps += self.n_batch
+            train_steps += 1
+
+            if self.verbose >= 1 and (self.updates % log_interval == 0):
+                explained_var = explained_variance(values, rewards)
+                logger.record_tabular("training_updates", self.updates)
+                logger.record_tabular("total_timesteps", self.num_timesteps)
+                logger.record_tabular("fps", fps)
+                logger.record_tabular("policy_entropy", float(policy_entropy))
+                logger.record_tabular("value_loss", float(value_loss))
+                logger.record_tabular("explained_variance", float(explained_var))
+                logger.dump_tabular()
+
+        print("Game over: {}".format(mask))
+
+        return ep_scores, policy_loss, value_loss, train_steps
+
+    def save(self, save_path, name):
         params = {
             "gamma": self.gamma,
             "n_steps": self.n_steps,
@@ -789,4 +817,4 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         weights = self.sess.run(self.trainable_variables)
 
-        self._save_to_file(save_path, json_params=json_params, weights=weights, params=params)
+        self._save_to_file(save_path, name, json_params=json_params, weights=weights, params=params)

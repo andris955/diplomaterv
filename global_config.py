@@ -48,12 +48,12 @@ target_performances = {
 }
 
 uniform_policy_steps = 10_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-MaxTrainSteps = 10_000_000 #k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
+MaxTrainSteps = 10_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
 tau = 1
 n_steps = 5
 model_id = "A5C_19_09_24_08_04"
 
-logging_frequency = 1000
+logging_frequency = 10  # number of episodes
 
 tensorboard_log = "./data/tb_logs"
 

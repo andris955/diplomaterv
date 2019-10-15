@@ -31,7 +31,6 @@ class MultiTaskLearning():
 
     def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
-        self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
         assert isinstance(NumberOfEpisodesForEstimating, int), "NumberOfEpisodesForEstimating must be integer"
@@ -45,28 +44,33 @@ class MultiTaskLearning():
         self.p = []  # Probability of training on an episode of task Ti next.
         self.tau = global_config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
 
-        for _ in range(self.k):
-            self.p.append(1/self.k)
+        for _ in range(len(self.T)):
+            self.p.append(1/len(self.T))
             self.a.append(0.0)
             self.m.append(0.000000001)
-        for i in range(self.k):
+        for i in range(len(self.T)):
             self.s.append([0.0 for _ in range(self.n)])
 
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
-            for train_step in range(self.t):
-                if train_step > self.l:
-                    for i in range(self.k):
-                        self.a[i] = sum(self.s[i])/self.n
-                        self.m[i] = (self.ta[self.T[i]] - self.a[i]) / (self.ta[self.T[i]] * self.tau)
-                    for i in range(self.k):
-                        self.p[i] = np.exp(self.m[i]) / (sum(np.exp(self.m)))
+            total_train_steps = 0
+            episode_learn = 0
+            while total_train_steps < self.t:
+                if total_train_steps > self.l:
+                    for j in range(len(self.T)):
+                        self.a[j] = sum(self.s[j])/self.n
+                        self.m[j] = (self.ta[self.T[j]] - self.a[j]) / (self.ta[self.T[j]]) #* self.tau)
+                    for j in range(len(self.T)):
+                        self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                scores = self.amta.train_for_one_episode(self.T[j])
-                if train_step % 100 == 0:
-                    self.amta.save_model()
+                ep_scores, train_steps = self.amta.train_for_one_episode(self.T[j])
+                episode_learn += 1
+                total_train_steps += train_steps
+                if episode_learn % global_config.logging_frequency == 0:
+                    performance = np.mean(self.m)
+                    self.amta.save_model(total_train_steps, performance)
                     self.amta.flush_tbw()
-                self.s[j].append(np.mean(scores))
+                self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
             self.amta.save_model()
@@ -75,7 +79,6 @@ class MultiTaskLearning():
     #TODO megcsinálni
     def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
-        self.k = len(self.T)  # Number of tasks
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
         assert isinstance(NumberOfEpisodesForEstimating, int), "NumberOfEpisodesForEstimating must be integer"
@@ -83,7 +86,7 @@ class MultiTaskLearning():
         self.t = MaxTrainSteps  # Total number of training steps for the algorithm
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.p = []  # Probability of training on an episode of task Ti next.
-        self.c = np.zeros(self.k)  # Count of the number of training episodes of task Ti.
+        self.c = np.zeros(len(self.T))  # Count of the number of training episodes of task Ti.
         self.r1 = 0
         self.r2 = 0  # First & second component of the reward for meta-learner, defined in lines 93-94
         self.r = 0  # Reward for meta-learner
@@ -92,11 +95,11 @@ class MultiTaskLearning():
         self.amta = ActiveSamplingMultiTaskAgent  # The Active Sampling multi-tasking agent
         self.ma = MetaLearningAgent # Meta Learning Agent.
         self.lam = lam # Lambda weighting.
-        for _ in range(self.k):
-            self.p.append(1/self.k)
-        for i in range(self.k):
+        for _ in range(len(self.T)):
+            self.p.append(1/len(self.T))
+        for i in range(len(self.T)):
             self.s.append([0.0 for _ in range(self.n)])
-        for i in range(self.k):
+        for i in range(len(self.T)):
             self.s_avg.append(0.0)
 
     def __EA4C_train(self):
@@ -115,7 +118,7 @@ class MultiTaskLearning():
             self.r1 = 1 - self.s_avg[j] / self.c[j]
             self.r2 = 1 - np.average(np.clip(s_min_l, 0, 1))
             self.r = self.lam * self.r1 + (1 - self.lam) * self.r2
-            self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, one_hot(j, self.k)], reward=self.r)
+            self.p = self.ma.train_and_sample(state=[self.c/sum(self.c), self.p, one_hot(j, len(self.T))], reward=self.r)
         self.amta.save_model()
         self.amta.exit_tbw()
 

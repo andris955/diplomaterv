@@ -1,14 +1,14 @@
 import tensorflow as tf
 import numpy as np
 import cloudpickle
+import os
 
-from stable_baselines.a2c.utils import Scheduler, mse, find_trainable_variables
+from stable_baselines.a2c.utils import mse, find_trainable_variables
 from stable_baselines.common import set_global_seeds
 
 import tf_util
-from MetaPolicy import MetaActorCriticPolicy
-
-import os
+from MetaPolicy import MetaLstmPolicyActorCriticPolicy
+from utils import Scheduler
 
 
 class MetaA2CModel:
@@ -16,7 +16,6 @@ class MetaA2CModel:
     The Meta A2C (Advantage Actor Critic) model class
 
     :param policy: (MetaActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnMetaLstmPolicy, ...)
-    :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
     :param vf_coef: (float) Value function coefficient for the loss calculation
     :param ent_coef: (float) Entropy coefficient for the loss caculation
@@ -33,17 +32,16 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, total_timesteps, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
+    def __init__(self, total_timesteps, input_length, output_length, n_batch, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0,
                  _init_setup_model=True):
 
-        self.policy = policy
+        self.policy = MetaLstmPolicyActorCriticPolicy
         self.verbose = verbose
-        self.action_space = None
-        self.n_envs = None
+        self.input_length = input_length
+        self.output_length = output_length
         self.num_timesteps = 0
-
-        self.initial_state = None
+        self.n_batch = n_batch
 
         self.gamma = gamma
         self.vf_coef = vf_coef
@@ -56,8 +54,8 @@ class MetaA2CModel:
 
         self.graph = None
         self.sess = None
+        self.initial_state = None
         self.learning_rate_ph = None
-        self.n_batch = None
         self.actions_ph = None
         self.advs_ph = None
         self.rewards_ph = None
@@ -89,15 +87,15 @@ class MetaA2CModel:
         """
 
 
-        assert issubclass(self.policy, MetaActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                           "instance of common.policies.MetaActorCriticPolicy."
+        assert issubclass(self.policy, MetaLstmPolicyActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
+                                                           "instance of MetaLstmPolicyActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():
             self.sess = tf_util.make_session(graph=self.graph)
 
-            with tf.variable_scope("policy_model", reuse=True, custom_getter=tf_util.outer_scope_getter("policy_model")):
-                policy_model = self.policy(self.sess, self.action_space, self.n_envs, reuse=False)
+            # azért nincs step model mert ugyanaz a lépés (n_batch) így felesleges.
+            policy_model = self.policy(sess=self.sess, input_length=self.input_length, output_length=self.output_length, n_batch=self.n_batch)
 
             with tf.variable_scope("loss", reuse=False):
                 self.actions_ph = policy_model.pdtype.sample_placeholder([None], name="action_ph")

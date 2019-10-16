@@ -1,4 +1,5 @@
 from stable_baselines.common.policies import MlpLstmPolicy
+from MetaPolicy import MetaLstmPolicyActorCriticPolicy
 from stable_baselines import A2C
 import gym
 from stable_baselines.common.vec_env import DummyVecEnv
@@ -25,5 +26,7 @@ if __name__ == '__main__':
     sess = tf.Session(graph=graph)
     n_env = 1
     n_steps = 5
-    policy = MlpLstmPolicy(sess, ob_space=env.observation_space, ac_space=env.action_space, n_env=n_env, n_steps=n_steps, n_batch=n_env*n_steps)
+    input_length = env.action_space.n*3
+    output_length = env.action_space.n
+    policy = MetaLstmPolicyActorCriticPolicy(sess, input_length, output_length, n_batch=n_env*n_steps, layers=(128,128,"lstm"), lstm_units=64)
 

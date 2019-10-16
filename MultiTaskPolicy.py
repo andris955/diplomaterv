@@ -47,7 +47,7 @@ class BaseMultiTaskPolicy(ABC):
     """
 
     def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=True,
-                 obs_phs=None, add_action_ph=False):
+                 obs_phs=None):
         self.n_env = n_env
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
@@ -56,10 +56,6 @@ class BaseMultiTaskPolicy(ABC):
             else:
                 self.obs_ph, self.processed_obs = obs_phs
 
-            if add_action_ph:
-                for key, value in ac_space_dict.items():
-                    self.action_ph = tf.placeholder(dtype=ac_space_dict[key].dtype, shape=(None,) + ac_space_dict[key].shape, name="action_ph")
-                    break
         self.sess = sess
         self.reuse = reuse
         self.ob_space = ob_space
@@ -121,8 +117,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     """
 
     def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=False):
-        super(MultiTaskActorCriticPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse,
-                                                scale=scale)
+        super(MultiTaskActorCriticPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=scale)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
         for key, value in ac_space_dict.items():

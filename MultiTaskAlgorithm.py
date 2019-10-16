@@ -59,7 +59,7 @@ class MultiTaskLearning():
                 if total_train_steps > self.l:
                     for j in range(len(self.T)):
                         self.a[j] = sum(self.s[j])/self.n
-                        self.m[j] = (self.ta[self.T[j]] - self.a[j]) / (self.ta[self.T[j]]) #* self.tau)
+                        self.m[j] = (self.ta[self.T[j]] - self.a[j]) / (self.ta[self.T[j]]) #* self.tau) # minél kisebb annál jobban teljesít az ágens az adott gamen
                     for j in range(len(self.T)):
                         self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)

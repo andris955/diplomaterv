@@ -186,33 +186,6 @@ class BaseMultitaskRLModel(ABC):
         pass
 
     @abstractmethod
-    def action_probability(self, game, observation, state=None, mask=None, actions=None):
-        """
-        If ``actions`` is ``None``, then get the model's action probability distribution from a given observation
-
-        depending on the action space the output is:
-            - Discrete: probability for each possible action
-            - Box: mean and standard deviation of the action output
-
-        However if ``actions`` is not ``None``, this function will return the probability that the given actions are
-        taken with the given parameters (observation, state, ...) on this model.
-
-        .. warning::
-            When working with continuous probability distribution (e.g. Gaussian distribution for continuous action)
-            the probability of taking a particular action is exactly zero.
-            See http://blog.christianperone.com/2019/01/ for a good explanation
-
-        :param observation: (np.ndarray) the input observation
-        :param state: (np.ndarray) The last states (can be None, used in recurrent policies)
-        :param mask: (np.ndarray) The last masks (can be None, used in recurrent policies)
-        :param actions: (np.ndarray) (OPTIONAL) For calculating the likelihood that the given actions are chosen by
-            the model for each of the given parameters. Must have the same number of actions and observations.
-            (set to None to return the complete action probability distribution)
-        :return: (np.ndarray) the model's action probability
-        """
-        pass
-
-    @abstractmethod
     def save(self, save_path, name):
         """
         Save the current parameters to file
@@ -371,77 +344,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         observation = observation.reshape((-1,) + self.observation_space.shape)
         actions, _, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
 
-        clipped_actions = actions
-        # # Clip the actions to avoid out of bound error
-        # if isinstance(self.action_space_dict[game], gym.spaces.Box):
-        #     clipped_actions = np.clip(actions, self.action_space_dict[game].low, self.action_space_dict[game].high)
-        #
-        # if not vectorized_env:
-        #     if state is not None:
-        #         raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-        #     clipped_actions = clipped_actions[0]
-
-        return clipped_actions  # , states
-
-    def action_probability(self, game, observation, state=None, mask_dict=None, actions=None):
-        if state is None:
-            state = self.initial_state
-        if mask_dict is None:
-            mask_dict = {}
-            for key in self.env_dict.key():
-                mask_dict[key] = [False for _ in range(self.n_envs)]
-        observation = np.array(observation)
-        vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
-
-        observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions_proba = self.proba_step(game, observation, state, mask_dict)
-
-        if len(actions_proba) == 0:  # empty list means not implemented
-            warnings.warn("Warning: action probability is not implemented for {} action space. Returning None."
-                          .format(type(self.action_space_dict[game]).__name__))
-            return None
-
-        if actions is not None:  # comparing the action distribution, to given actions
-            actions = np.array([actions])
-            if isinstance(self.action_space_dict[game], gym.spaces.Discrete):
-                actions = actions.reshape((-1,))
-                assert observation.shape[0] == actions.shape[0], \
-                    "Error: batch sizes differ for actions and observations."
-                actions_proba = actions_proba[np.arange(actions.shape[0]), actions]
-
-            elif isinstance(self.action_space_dict[game], gym.spaces.MultiDiscrete):
-                actions = actions.reshape((-1, len(self.action_space_dict[game].nvec)))
-                assert observation.shape[0] == actions.shape[0], \
-                    "Error: batch sizes differ for actions and observations."
-                # Discrete action probability, over multiple categories
-                actions = np.swapaxes(actions, 0, 1)  # swap axis for easier categorical split
-                actions_proba = np.prod([proba[np.arange(act.shape[0]), act]
-                                         for proba, act in zip(actions_proba, actions)], axis=0)
-
-            elif isinstance(self.action_space_dict[game], gym.spaces.MultiBinary):
-                actions = actions.reshape((-1, self.action_space_dict[game].n))
-                assert observation.shape[0] == actions.shape[0], \
-                    "Error: batch sizes differ for actions and observations."
-                # Bernoulli action probability, for every action
-                actions_proba = np.prod(actions_proba * actions + (1 - actions_proba) * (1 - actions), axis=1)
-
-            elif isinstance(self.action_space_dict[game], gym.spaces.Box):
-                warnings.warn("The probabilty of taken a given action is exactly zero for a continuous distribution."
-                              "See http://blog.christianperone.com/2019/01/ for a good explanation")
-                actions_proba = np.zeros((observation.shape[0], 1), dtype=np.float32)
-            else:
-                warnings.warn("Warning: action_probability not implemented for {} actions space. Returning None."
-                              .format(type(self.action_space_dict[game]).__name__))
-                return None
-            # normalize action proba shape for the different gym spaces
-            actions_proba = actions_proba.reshape((-1, 1))
-
-        if not vectorized_env:
-            if state is not None:
-                raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            actions_proba = actions_proba[0]
-
-        return actions_proba
+        return actions
 
     @abstractmethod
     def save(self, save_path, name):

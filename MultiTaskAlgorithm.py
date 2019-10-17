@@ -62,14 +62,14 @@ class MultiTaskLearning():
                         self.m[j] = (self.ta[self.T[j]] - self.a[j]) / (self.ta[self.T[j]]) #* self.tau) # minél kisebb annál jobban teljesít az ágens az adott gamen
                     for j in range(len(self.T)):
                         self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
-                j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                ep_scores, train_steps = self.amta.train_for_one_episode(self.T[j])
-                episode_learn += 1
-                total_train_steps += train_steps
                 if episode_learn % global_config.logging_frequency == 0:
                     performance = np.mean(self.m)
                     self.amta.save_model(total_train_steps, 1-performance)
                     self.amta.flush_tbw()
+                j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+                ep_scores, train_steps = self.amta.train_for_one_episode(self.T[j])
+                episode_learn += 1
+                total_train_steps += train_steps
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)

@@ -109,7 +109,7 @@ class Agent:
 
     def save_model(self, total_train_steps, performance):
         base_path = "./data/models/" + self.algorithm + '_' + self.initialize_time
-        name = "{}-{:1.2f}".format(total_train_steps, performance)
+        name = "{:08}-{:1.2f}".format(total_train_steps, performance)
         try:
             if not os.path.exists(base_path):
                 os.mkdir(base_path)

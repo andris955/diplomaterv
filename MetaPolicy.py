@@ -52,7 +52,7 @@ class MetaLstmPolicyActorCriticPolicy:
                 raise ValueError("layers are not correct: it has to contain arbitrary number of integers and finally str(lstm)")
 
         # Building the non-shared part of the network
-        self.value_fn = linear(latent_vector, 'vf', 1)
+        self.value_fn = linear(latent_vector, 'mvf', 1)
         self.proba_distribution, self.policy, self.q_value = \
             self.pdtype.proba_distribution_from_latent(latent_vector, latent_vector)
 

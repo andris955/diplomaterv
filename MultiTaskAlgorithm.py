@@ -68,7 +68,7 @@ class MultiTaskLearning():
                 total_train_steps += train_steps
                 if episode_learn % global_config.logging_frequency == 0:
                     performance = np.mean(self.m)
-                    self.amta.save_model(total_train_steps, performance)
+                    self.amta.save_model(total_train_steps, 1-performance)
                     self.amta.flush_tbw()
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:

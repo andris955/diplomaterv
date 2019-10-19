@@ -5,7 +5,7 @@ import tensorflow as tf
 from gym.spaces import Discrete
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc
 from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution
-from stable_baselines.common.input import observation_input
+from utils import observation_input
 
 
 def shared_network(scaled_images, **kwargs):
@@ -46,19 +46,14 @@ class BaseMultiTaskPolicy(ABC):
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
 
-    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=True,
-                 obs_phs=None):
+    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, n_batch, reuse=False):
         self.n_env = n_env
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
-            if obs_phs is None:
-                self.obs_ph, self.processed_obs = observation_input(ob_space, n_batch, scale=scale)
-            else:
-                self.obs_ph, self.processed_obs = obs_phs
-
+            self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_batch)
         self.sess = sess
         self.reuse = reuse
-        self.ob_space = ob_space
+        self.ob_spaces = ob_spaces
         self.ac_space_dict = ac_space_dict
 
     @staticmethod

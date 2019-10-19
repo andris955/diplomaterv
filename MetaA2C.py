@@ -33,8 +33,7 @@ class MetaA2CModel:
     """
 
     def __init__(self, total_timesteps, input_length, output_length, n_batch, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0,
-                 _init_setup_model=True):
+                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmPolicyActorCriticPolicy
         self.verbose = verbose
@@ -86,7 +85,6 @@ class MetaA2CModel:
         Create all the functions and tensorflow graphs necessary to train the model
         """
 
-
         assert issubclass(self.policy, MetaLstmPolicyActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
                                                            "instance of MetaLstmPolicyActorCriticPolicy."
 
@@ -134,30 +132,15 @@ class MetaA2CModel:
             self.initial_state = self.policy_model.initial_state
             tf.global_variables_initializer().run(session=self.sess)
 
-
-    def train_step(self, state, states, rewards, masks, actions, values):
+    def train_step(self, inputs, rewards, actions, values):
         """
         applies a training step to the model
-
-        :param obs: ([float]) The input observations
-        :param states: ([float]) The states (used for recurrent policies)
-        :param rewards: ([float]) The rewards from the environment
-        :param masks: ([bool]) Whether or not the episode is over (used for recurrent policies)
-        :param actions: ([float]) The actions taken
-        :param values: ([float]) The logits values
-        :param update: (int) the current step iteration
-        :param writer: (TensorFlow Summary.writer) the writer for tensorboard
-        :return: (float, float, float) policy loss, value loss, policy entropy
         """
         advs = rewards - values
         cur_lr = self.learning_rate_schedule.value()
 
-        td_map = {self.train_model.obs_ph: state, self.actions_ph: actions, self.advs_ph: advs,
+        td_map = {self.policy_model.input_ph: inputs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
-
-        if states is not None:
-            td_map[self.train_model.states_ph] = states
-            td_map[self.train_model.masks_ph] = masks
 
         policy_loss, value_loss, policy_entropy, _ = self.sess.run(
             [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
@@ -204,7 +187,6 @@ class MetaA2CModel:
             "verbose": self.verbose,
             "policy": self.policy,
             "action_space": self.action_space,
-            "n_envs": self.n_envs,
         }
 
         params = self.sess.run(self.params)

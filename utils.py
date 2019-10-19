@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import os
 import json
+from gym.spaces import Box
 
 
 def one_hot(k, n):
@@ -138,6 +139,22 @@ class Scheduler(object):
         :return: (float) the value for the current number of iterations
         """
         return self.initial_value * self.schedule(steps / self.nvalues)
+
+def observation_input(batch_size, ob_spaces):
+    for ob_space in ob_spaces:
+        if isinstance(ob_space, Box):
+            continue
+        else:
+            raise ValueError("All observation space must be a box!")
+    observation_ph = tf.placeholder(shape=(batch_size, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
+    processed_observations = tf.cast(observation_ph, tf.float32)
+    processed_observations = tf.image.resize(processed_observations, (210, 160))
+    # rescale to [1, 0] if the bounds are defined
+    if (not np.any(np.isinf(ob_spaces[0].low)) and not np.any(np.isinf(ob_spaces[0].high)) and
+       np.any((ob_spaces[0].high - ob_spaces[0].low) != 0)):
+        processed_observations = ((processed_observations - ob_spaces[0].low) / (ob_spaces[0].high - ob_spaces[0].low))
+    return observation_ph, processed_observations
+
 
 
 def find_trainable_variables(key):

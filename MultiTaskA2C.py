@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
-import warnings
+import cv2
 import cloudpickle
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy
@@ -48,7 +48,7 @@ class BaseMultitaskRLModel(ABC):
         self.verbose = verbose
         self._requires_vec_env = requires_vec_env
         self.policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-        self.observation_space = None
+        self.observation_spaces = []
         self.action_space_dict = {}
         self.n_envs = None
         self._vectorize_action = False
@@ -58,7 +58,7 @@ class BaseMultitaskRLModel(ABC):
             if not isinstance(env_dict, dict):
                 print("env_dict must be a dictionary with keys as the name of the game and values are SubprocVecEnv objects")
             for key, value in env_dict.items():
-                self.observation_space = env_dict[key].observation_space
+                self.observation_spaces.append(env_dict[key].observation_space)
                 self.action_space_dict[key] = env_dict[key].action_space
             if requires_vec_env:
                 for key, value in self.env_dict.items():
@@ -102,8 +102,6 @@ class BaseMultitaskRLModel(ABC):
 
         # sanity checking the environment
         for key, env in env_dict.items():
-            assert self.observation_space == env.observation_space, \
-                "Error: the environments passed must have at least the same observation space as the model was trained on."
             assert self.action_space_dict[key] == env.action_space, \
                 "Error: the environment passed must have at least the same action space as the model was trained on."
             if self._requires_vec_env:
@@ -245,56 +243,6 @@ class BaseMultitaskRLModel(ABC):
         x_exp = np.exp(x_input.T - np.max(x_input.T, axis=0))
         return (x_exp / x_exp.sum(axis=0)).T
 
-    @staticmethod
-    def _is_vectorized_observation(observation, observation_space):
-        """
-        For every observation type, detects and validates the shape,
-        then returns whether or not the observation is vectorized.
-
-        :param observation: (np.ndarray) the input observation to validate
-        :param observation_space: (gym.spaces) the observation space
-        :return: (bool) whether the given observation is vectorized or not
-        """
-        if isinstance(observation_space, gym.spaces.Box):
-            if observation.shape == observation_space.shape:
-                return False
-            elif observation.shape[1:] == observation_space.shape:
-                return True
-            else:
-                raise ValueError("Error: Unexpected observation shape {} for ".format(observation.shape) +
-                                 "Box environment, please use {} ".format(observation_space.shape) +
-                                 "or (n_env, {}) for the observation shape."
-                                 .format(", ".join(map(str, observation_space.shape))))
-        elif isinstance(observation_space, gym.spaces.Discrete):
-            if observation.shape == ():  # A numpy array of a number, has shape empty tuple '()'
-                return False
-            elif len(observation.shape) == 1:
-                return True
-            else:
-                raise ValueError("Error: Unexpected observation shape {} for ".format(observation.shape) +
-                                 "Discrete environment, please use (1,) or (n_env, 1) for the observation shape.")
-        elif isinstance(observation_space, gym.spaces.MultiDiscrete):
-            if observation.shape == (len(observation_space.nvec),):
-                return False
-            elif len(observation.shape) == 2 and observation.shape[1] == len(observation_space.nvec):
-                return True
-            else:
-                raise ValueError("Error: Unexpected observation shape {} for MultiDiscrete ".format(observation.shape) +
-                                 "environment, please use ({},) or ".format(len(observation_space.nvec)) +
-                                 "(n_env, {}) for the observation shape.".format(len(observation_space.nvec)))
-        elif isinstance(observation_space, gym.spaces.MultiBinary):
-            if observation.shape == (observation_space.n,):
-                return False
-            elif len(observation.shape) == 2 and observation.shape[1] == observation_space.n:
-                return True
-            else:
-                raise ValueError("Error: Unexpected observation shape {} for MultiBinary ".format(observation.shape) +
-                                 "environment, please use ({},) or ".format(observation_space.n) +
-                                 "(n_env, {}) for the observation shape.".format(observation_space.n))
-        else:
-            raise ValueError("Error: Cannot determine if the observation is vectorized with the space type {}."
-                             .format(observation_space))
-
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -341,7 +289,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             print("The game must be in the env_dict dictionary!")
             exit()
 
-        observation = observation.reshape((-1,) + self.observation_space.shape)
+        observation = observation.reshape((-1,) + observation.shape)
         actions, _, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
 
         return actions
@@ -461,8 +409,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         self._setup_learn(seed)
 
-        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps,
-                                                schedule=self.lr_schedule)
+        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps, schedule=self.lr_schedule)
         self.episode_reward = {}
         for key in self.env_dict.keys():
             self.episode_reward[key] = np.zeros((self.n_envs,))
@@ -485,7 +432,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.sess = tf_util.make_session(graph=self.graph)
             n_batch_step = None
 
-            step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
+            step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, 1,
                                      n_batch_step, reuse=False, **self.policy_kwargs)
 
             self.trainable_variables = utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
@@ -506,11 +453,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 n_batch_step = None
                 n_batch_train = None
 
-                step_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs, 1,
+                step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, 1,
                                          n_batch_step, reuse=False, **self.policy_kwargs)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_util.outer_scope_getter("train_model")):
-                    train_model = self.policy(self.sess, self.observation_space, self.action_space_dict, self.n_envs,
+                    train_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs,
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
@@ -683,7 +630,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "verbose": self.verbose,
             "policy": self.policy,
             #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
-            "observation_space": self.observation_space,
+            "observation_spaces": self.observation_spaces,
             "action_space_dict": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
@@ -705,7 +652,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
-            "observation_space": self.observation_space.shape,
+            "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
             "action_space": {},
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,

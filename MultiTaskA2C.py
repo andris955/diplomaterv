@@ -85,7 +85,7 @@ class BaseMultitaskRLModel(ABC):
         """
         return self.env_dict
 
-    def set_env(self, env_dict):
+    def set_env(self, env_dict, envs):
         """
         Checks the validity of the environment, and if it is coherent, set it as the current environment.
 
@@ -127,7 +127,10 @@ class BaseMultitaskRLModel(ABC):
                 self.n_envs = 1
 
         self.env_dict = env_dict
-        self.envs = [key for key in self.env_dict.keys()]
+        self.envs = envs
+        self.observation_spaces = [self.env_dict[key].observation_space for key in self.envs]
+        for key in self.envs:
+            self.action_space_dict[key] = self.env_dict[key].action_space
 
     def _init_num_timesteps(self, reset_num_timesteps=True):
         """
@@ -306,19 +309,18 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
         model.transfer_id.append(model_id)
-        # model.__dict__.update(kwargs)
 
-
-        envs = [key for key in params['action_space_dict'].keys()]
-        # print(envs)
-        # exit()
+        # envs = [key for key in params['action_space_dict'].keys()]
+        envs = params["envs"]
+        print(envs)
+        exit()
 
         if not transfer:
             model.setup_step_model()
         else:
             envs_to_set_names = [key for key in envs_to_set.keys()]
             if envs == envs_to_set_names:
-                model.set_env(envs_to_set)
+                model.set_env(envs_to_set, envs)
                 model.setup_model(transfer=True)
             else:
                 print("The envs passed as argument is not corresponding to the envs that the model is trained on: {}".format(str(envs)))
@@ -435,10 +437,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.graph = tf.Graph()
         with self.graph.as_default():
             self.sess = tf_utils.make_session(graph=self.graph)
-            n_batch_step = None
 
-            step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, 1,
-                                     n_batch_step, reuse=False, **self.policy_kwargs)
+            step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
+                                     reuse=False, **self.policy_kwargs)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
@@ -622,6 +623,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
     def save(self, save_path, name):
         params = {
+            "envs": self.envs,
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
@@ -634,8 +636,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "verbose": self.verbose,
             "policy": self.policy,
             #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
-            "observation_spaces": self.observation_spaces,
-            "action_space_dict": self.action_space_dict,
+            # "observation_spaces": self.observation_spaces,
+            # "action_space_dict": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,
@@ -647,7 +649,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         }
 
         json_params = {
-            "envs": [],
+            "envs": self.envs,
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
@@ -668,7 +670,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         }
 
         for game, value in self.action_space_dict.items():
-            json_params['envs'].append(game)
             json_params["action_spaces"][game] = value.n
 
         weights = self.sess.run(self.trainable_variables)

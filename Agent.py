@@ -15,7 +15,7 @@ import numpy as np
 class Agent:
     def __init__(self, algorithm, list_of_games, max_train_steps, n_cpus, transfer_id, tensorboard_logging):
         self.algorithm = algorithm
-        self.listOfGames = list_of_games
+        self.list_of_games = list_of_games
         self.max_train_steps = max_train_steps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
@@ -33,9 +33,9 @@ class Agent:
         self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step scores policy_loss value_loss")
 
         if transfer_id:
-            self.logger = Logger(transfer_id, self.listOfGames)
+            self.logger = Logger(transfer_id, self.list_of_games)
         else:
-            self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
+            self.logger = Logger(algorithm + "_" + self.initialize_time, self.list_of_games)
 
         self.tbw = None
         self.writer = None
@@ -46,14 +46,14 @@ class Agent:
             self.train_step[game] = 0
 
         self.episode_learn = 0
-        self.data_available = [False]*len(self.listOfGames)
+        self.data_available = [False]*len(self.list_of_games)
 
         self.__setup_environments()
         self.__setup_model()
         self.__setup_runners()
 
     def __setup_environments(self):
-        for game in self.listOfGames:
+        for game in self.list_of_games:
             env = SubprocVecEnv([lambda: gym.make(game) for i in range(self.n_cpus)])
             assert isinstance(env.action_space, gym.spaces.Discrete), "Error: all the input games must have Discrete action space"
             self.sub_proc_environments[game] = env
@@ -70,7 +70,7 @@ class Agent:
 
     def __setup_runners(self):
         self.runners = {}
-        for environment in self.listOfGames:
+        for environment in self.list_of_games:
             self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment],
                                                     self.model, n_steps=global_config.n_steps, gamma=0.99)
 
@@ -84,7 +84,7 @@ class Agent:
                                       total_train_step=self.model.train_step, train_step=self.train_step[game],
                                       scores=np.mean(ep_scores), policy_loss=policy_loss, value_loss=value_loss)
             self.logger.log(game, log_value)
-            self.data_available[self.listOfGames.index(game)] = True
+            self.data_available[self.list_of_games.index(game)] = True
             if self.episode_learn % global_config.logging_frequency == 0 and all(self.data_available) is True:
                 self.logger.dump()
 

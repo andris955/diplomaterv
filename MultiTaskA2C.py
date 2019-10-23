@@ -43,6 +43,7 @@ class BaseMultitaskRLModel(ABC):
         else:
             self.policy = policy
         self.env_dict = env_dict
+        self.envs = [key for key in self.env_dict.keys()] if self.env_dict is not None else None
         self.verbose = verbose
         self._requires_vec_env = requires_vec_env
         self.policy_kwargs = {} if policy_kwargs is None else policy_kwargs
@@ -55,11 +56,11 @@ class BaseMultitaskRLModel(ABC):
         if env_dict is not None:
             if not isinstance(env_dict, dict):
                 print("env_dict must be a dictionary with keys as the name of the game and values are SubprocVecEnv objects")
-            for key, value in env_dict.items():
+            for key in env_dict.keys():
                 self.observation_spaces.append(env_dict[key].observation_space)
                 self.action_space_dict[key] = env_dict[key].action_space
             if requires_vec_env:
-                for key, value in self.env_dict.items():
+                for key in self.env_dict.keys():
                     if isinstance(self.env_dict[key], VecEnv):
                         self.n_envs = self.env_dict[key].num_envs
                         break
@@ -69,7 +70,7 @@ class BaseMultitaskRLModel(ABC):
                 for key, env in self.env_dict.items():
                     if isinstance(env, VecEnv):
                         if env.num_envs == 1:
-                            self.env = _UnvecWrapper(env)
+                            self.env_dict[key] = _UnvecWrapper(env)
                             self._vectorize_action = True
                         else:
                             raise ValueError("Error: the model requires a non vectorized environment or a single vectorized"
@@ -115,7 +116,7 @@ class BaseMultitaskRLModel(ABC):
                 # Otherwise tell the user about this issue
                 if isinstance(env, VecEnv):
                     if env.num_envs == 1:
-                        env = _UnvecWrapper(env)
+                        env_dict[key] = _UnvecWrapper(env)
                         self._vectorize_action = True
                     else:
                         raise ValueError("Error: the model requires a non vectorized environment or a single vectorized "
@@ -126,6 +127,7 @@ class BaseMultitaskRLModel(ABC):
                 self.n_envs = 1
 
         self.env_dict = env_dict
+        self.envs = [key for key in self.env_dict.keys()]
 
     def _init_num_timesteps(self, reset_num_timesteps=True):
         """
@@ -207,9 +209,9 @@ class BaseMultitaskRLModel(ABC):
                 with open(model_path, "wb") as file_:
                     cloudpickle.dump((weights, params), file_)
 
-                if not os.path.exists(param_path):
-                    with open(param_path, "w") as file_:
-                        json.dump(json_params, file_)
+                # if not os.path.exists(param_path):
+                with open(param_path, "w") as file_:
+                    json.dump(json_params, file_)
             else:
                 raise ValueError("Error save_path must be a directory path")
 
@@ -282,7 +284,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         assert isinstance(game, str), "Error: the game passed is not a string"
 
         try:
-            self.action_space_dict[game]
+            self.env_dict[game]
         except:
             print("The game must be in the env_dict dictionary!")
             exit()
@@ -306,7 +308,10 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         model.transfer_id.append(model_id)
         # model.__dict__.update(kwargs)
 
+
         envs = [key for key in params['action_space_dict'].keys()]
+        # print(envs)
+        # exit()
 
         if not transfer:
             model.setup_step_model()
@@ -388,7 +393,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.pg_loss = {}
         self.vf_loss = {}
         self.entropy = {}
-        self.trainable_variables = None
         self.apply_backprop = None
         self.train_model = None
         self.step_model = None
@@ -451,11 +455,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.n_batch = self.n_envs * self.n_steps
                 self.observation_spaces = [self.observation_space for i in range(5)] #TODO kitörölni
-                step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
+                step_model = self.policy(self.sess, self.envs, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
                                          reuse=False, **self.policy_kwargs)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_utils.outer_scope_getter("train_model")):
-                    train_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs,
+                    train_model = self.policy(self.sess, self.envs, self.observation_spaces, self.action_space_dict, self.n_envs,
                                               self.n_steps, reuse=True, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
@@ -655,7 +659,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
             "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
-            "action_space": {},
+            "action_spaces": {},
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             "transfer_id": self.transfer_id,
@@ -665,7 +669,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         for game, value in self.action_space_dict.items():
             json_params['envs'].append(game)
-            json_params["action_space"][game] = value.n
+            json_params["action_spaces"][game] = value.n
 
         weights = self.sess.run(self.trainable_variables)
 

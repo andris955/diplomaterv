@@ -45,8 +45,9 @@ class BaseMultiTaskPolicy(ABC):
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
 
-    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
+    def __init__(self, sess, envs, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
         self.n_env = n_env
+        self.envs = envs
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
             self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_env*n_steps)
@@ -54,24 +55,6 @@ class BaseMultiTaskPolicy(ABC):
         self.reuse = reuse
         self.ob_spaces = ob_spaces
         self.ac_space_dict = ac_space_dict
-
-    @staticmethod
-    def _kwargs_check(feature_extraction, kwargs):
-        """
-        Ensure that the user is not passing wrong keywords
-        when using policy_kwargs.
-
-        :param feature_extraction: (str)
-        :param kwargs: (dict)
-        """
-        # When using policy_kwargs parameter on model creation,
-        # all keywords arguments must be consumed by the policy constructor except
-        # the ones for the cnn_extractor network (cf nature_cnn()), where the keywords arguments
-        # are not passed explicitely (using **kwargs to forward the arguments)
-        # that's why there should be not kwargs left when using the mlp_extractor
-        # (in that case the keywords arguments are passed explicitely)
-        if feature_extraction == 'mlp' and len(kwargs) > 0:
-            raise ValueError("Unknown keywords for policy: {}".format(kwargs))
 
     def step(self, game, obs, state=None, mask=None):
         """
@@ -110,13 +93,13 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     :param scale: (bool) whether or not to scale the input
     """
 
-    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
-        super(MultiTaskActorCriticPolicy, self).__init__(sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
+    def __init__(self, sess, envs, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
+        super(MultiTaskActorCriticPolicy, self).__init__(sess, envs, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
-        for key, value in ac_space_dict.items():
-            self.pdtype_dict[key] = make_proba_dist_type(ac_space_dict[key])
-            self.is_discrete_dict[key] = isinstance(ac_space_dict[key], Discrete)
+        for key in self.envs:
+            self.pdtype_dict[key] = make_proba_dist_type(self.ac_space_dict[key])
+            self.is_discrete_dict[key] = isinstance(self.ac_space_dict[key], Discrete)
         self.policy_dict = {}
         self.proba_distribution_dict = {}
         self.value_fn_dict = {}
@@ -133,7 +116,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.neglogp = {}
         self.policy_proba = {}
         self._value = {}
-        for key in self.ac_space_dict.keys():
+        for key in self.envs:
             with tf.variable_scope(key + "_output", reuse=True):
                 assert self.policy_dict is not {} and self.proba_distribution_dict is not {} and self.value_fn_dict is not {}
                 self.action[key] = self.proba_distribution_dict[key].sample()
@@ -181,8 +164,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
 
 class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
-    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False, cnn_extractor=shared_network, **kwargs):
-        super(MultiTaskA2CPolicy, self).__init__(sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
+    def __init__(self, sess, envs, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False, cnn_extractor=shared_network, **kwargs):
+        super(MultiTaskA2CPolicy, self).__init__(sess, envs, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)

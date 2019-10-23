@@ -38,7 +38,6 @@ class BaseMultiTaskPolicy(ABC):
     :param ac_space_dict: (Dict of Gym Space) The action space of the environment
     :param n_env: (int) The number of environments to run
     :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
     :param scale: (bool) whether or not to scale the input
     :param obs_phs: (TensorFlow Tensor, TensorFlow Tensor) a tuple containing an override for observation placeholder
@@ -46,11 +45,11 @@ class BaseMultiTaskPolicy(ABC):
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
 
-    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, n_batch, reuse=False):
+    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
         self.n_env = n_env
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_batch)
+            self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_env*n_steps)
         self.sess = sess
         self.reuse = reuse
         self.ob_spaces = ob_spaces
@@ -111,8 +110,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     :param scale: (bool) whether or not to scale the input
     """
 
-    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, scale=False):
-        super(MultiTaskActorCriticPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=scale)
+    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False):
+        super(MultiTaskActorCriticPolicy, self).__init__(sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
         for key, value in ac_space_dict.items():
@@ -182,8 +181,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
 
 class MultiTaskA2CPolicy(MultiTaskActorCriticPolicy):
-    def __init__(self, sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=False, cnn_extractor=shared_network, **kwargs):
-        super(MultiTaskA2CPolicy, self).__init__(sess, ob_space, ac_space_dict, n_env, n_steps, n_batch, reuse=reuse, scale=True)
+    def __init__(self, sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=False, cnn_extractor=shared_network, **kwargs):
+        super(MultiTaskA2CPolicy, self).__init__(sess, ob_spaces, ac_space_dict, n_env, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)

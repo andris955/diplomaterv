@@ -15,7 +15,6 @@ class MetaA2CModel:
     """
     The Meta A2C (Advantage Actor Critic) model class
 
-    :param policy: (MetaActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnMetaLstmPolicy, ...)
     :param gamma: (float) Discount factor
     :param vf_coef: (float) Value function coefficient for the loss calculation
     :param ent_coef: (float) Entropy coefficient for the loss caculation
@@ -41,6 +40,7 @@ class MetaA2CModel:
         self.output_length = output_length
         self.num_timesteps = 0
         self.n_batch = n_batch
+        self.total_timesteps = total_timesteps
 
         self.gamma = gamma
         self.vf_coef = vf_coef
@@ -71,11 +71,13 @@ class MetaA2CModel:
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
+        self.params = None
+        self.policy_model = None
 
         if seed is not None:
             set_global_seeds(seed)
 
-        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=total_timesteps, schedule=self.lr_schedule)
+        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=total_timesteps, schedule=self.lr_schedule, init_step=self.num_timesteps)
 
         if _init_setup_model:
             self.setup_model()
@@ -86,7 +88,7 @@ class MetaA2CModel:
         """
 
         assert issubclass(self.policy, MetaLstmPolicyActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                           "instance of MetaLstmPolicyActorCriticPolicy."
+                                                                         "instance of MetaLstmPolicyActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -147,14 +149,12 @@ class MetaA2CModel:
 
         return policy_loss, value_loss, policy_entropy
 
-
     def predict(self, observation, state=None, deterministic=False):
         """
         Get the model's action from an observation
 
         :param observation: (np.ndarray) the input observation
         :param state: (np.ndarray) The last states (can be None, used in recurrent policies)
-        :param mask: (np.ndarray) The last masks (can be None, used in recurrent policies)
         :param deterministic: (bool) Whether or not to return deterministic actions.
         :return: (np.ndarray, np.ndarray) the model's action and the next state (used in recurrent policies)
         """
@@ -186,7 +186,12 @@ class MetaA2CModel:
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
             "policy": self.policy,
-            "action_space": self.action_space,
+            "num_timesteps": self.num_timesteps,
+            "input_length": self.input_length,
+            "output_length": self.output_length,
+            "n_batch": self.n_batch,
+            "total_timesteps": self.total_timesteps,
+
         }
 
         params = self.sess.run(self.params)
@@ -199,14 +204,12 @@ class MetaA2CModel:
         Load the model from file
 
         :param load_path: (str or file-like) the saved parameter location
-        :param env: (Gym Envrionment) the new environment to run the loaded model on
             (can be None if you only need prediction from a trained model)
-        :param kwargs: extra arguments to change the model when loading
         """
 
         data, params = cls._load_from_file(load_path)
 
-        model = cls(policy=data["policy"], _init_setup_model=False)
+        model = cls(total_timesteps=data["total_timesteps"], input_length=data["input_length"], output_length=data["output_length"], n_batch=data["output_length"], _init_setup_model=False)
         model.__dict__.update(data)
         model.setup_model()
 

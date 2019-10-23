@@ -105,7 +105,7 @@ SCHEDULES = {
 
 
 class Scheduler(object):
-    def __init__(self, initial_value, n_values, schedule):
+    def __init__(self, initial_value, n_values, schedule, init_step=None):
         """
         Update a value every iteration, with a specific curve
 
@@ -113,7 +113,7 @@ class Scheduler(object):
         :param n_values: (int) the total number of iterations
         :param schedule: (function) the curve you wish to follow for your value
         """
-        self.step = 0.
+        self.step = 0 if init_step is None else init_step
         self.initial_value = initial_value
         self.nvalues = n_values
         self.schedule = SCHEDULES[schedule]
@@ -140,7 +140,7 @@ class Scheduler(object):
         """
         return self.initial_value * self.schedule(steps / self.nvalues)
 
-def observation_input(batch_size, ob_spaces):
+def observation_input(ob_spaces, batch_size):
     for ob_space in ob_spaces:
         if isinstance(ob_space, Box):
             continue

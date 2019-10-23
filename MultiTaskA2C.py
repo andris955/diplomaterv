@@ -409,7 +409,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         self._setup_learn(seed)
 
-        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps, schedule=self.lr_schedule)
+        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps, schedule=self.lr_schedule, init_step=self.num_timesteps)
         self.episode_reward = {}
         for key in self.env_dict.keys():
             self.episode_reward[key] = np.zeros((self.n_envs,))
@@ -450,15 +450,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.n_batch = self.n_envs * self.n_steps
 
-                n_batch_step = None
-                n_batch_train = None
-
-                step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, 1,
-                                         n_batch_step, reuse=False, **self.policy_kwargs)
+                step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
+                                         reuse=False, **self.policy_kwargs)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_util.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs,
-                                              self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
+                                              self.n_steps, reuse=True, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
                     self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")

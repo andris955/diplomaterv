@@ -397,6 +397,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.summary = None
         self.episode_reward = None
         self.updates = None
+        self.total_train_steps = None
+        self.train_step = 0
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
@@ -406,8 +408,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         _ = self._init_num_timesteps(True)
 
         self._setup_learn(seed)
-
-        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=max_train_steps, schedule=self.lr_schedule, init_step=self.num_timesteps)
+        self.total_train_steps = max_train_steps
+        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=self.total_train_steps,
+                                                      schedule=self.lr_schedule, init_step=self.num_timesteps)
         self.episode_reward = {}
         for key in self.env_dict.keys():
             self.episode_reward[key] = np.zeros((self.n_envs,))
@@ -573,7 +576,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         mask = [False]*self.n_envs
         ep_scores = [-1]*self.n_envs
         policy_loss = value_loss = None
-        train_steps = 0
+        ep_train_step = 0
 
         while mask != [True]*self.n_envs:
             t_start = time.time()
@@ -584,7 +587,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             n_seconds = time.time() - t_start
             fps = int(self.n_batch / n_seconds)
 
-            tmp_ep_scores = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)), masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
+            tmp_ep_scores = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)),
+                                                           masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
 
             masks_reshaped = masks.reshape((self.n_envs, self.n_steps))
             assert masks_reshaped.shape[0] == self.n_envs, "dones.shape[0] must be n_envs"
@@ -595,7 +599,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         ep_scores[i] = tmp_ep_scores[i]
 
             self.num_timesteps += self.n_batch
-            train_steps += 1
+            ep_train_step += 1
+            self.train_step += 1
 
             if self.verbose >= 1 and (self.updates % log_interval == 0):
                 explained_var = explained_variance(values, rewards)
@@ -609,7 +614,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         print("Game over: {}".format(mask))
 
-        return ep_scores, policy_loss, value_loss, train_steps
+        return ep_scores, policy_loss, value_loss, ep_train_step
 
     def save(self, save_path, name):
         params = {
@@ -631,7 +636,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
-            'transfer_id': self.transfer_id,
+            "transfer_id": self.transfer_id,
+            "total_train_steps": self.total_train_steps,
+            "train_step": self.train_step,
             "policy_kwargs": self.policy_kwargs
         }
 

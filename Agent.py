@@ -13,17 +13,15 @@ import numpy as np
 
 
 class Agent:
-    def __init__(self, algorithm, listOfGames, MaxTrainSteps, n_cpus, transfer_id, tensorboard_logging):
+    def __init__(self, algorithm, list_of_games, max_train_steps, n_cpus, transfer_id, tensorboard_logging):
         self.algorithm = algorithm
-        self.listOfGames = listOfGames
-        self.max_train_steps = MaxTrainSteps
+        self.listOfGames = list_of_games
+        self.max_train_steps = max_train_steps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
         self.policy = MultiTaskA2CPolicy
-        self.tbw = None
-        self.writer = None
         self.tb_log = tensorboard_logging
-        self.total_train_step = 0
+        self.start_time = time.time()
 
         now = str(datetime.datetime.now())[2:16]
         now = now.replace(' ', '_')
@@ -32,8 +30,6 @@ class Agent:
         self.initialize_time = now
         self.transfer_id = transfer_id
 
-        self.start_time = time.time()
-
         self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step scores policy_loss value_loss")
 
         if transfer_id:
@@ -41,8 +37,12 @@ class Agent:
         else:
             self.logger = Logger(algorithm + "_" + self.initialize_time, self.listOfGames)
 
+        self.tbw = None
+        self.writer = None
+        self.model = None
+
         self.train_step = {}
-        for game in listOfGames:
+        for game in list_of_games:
             self.train_step[game] = 0
 
         self.episode_learn = 0
@@ -60,7 +60,8 @@ class Agent:
 
     def __setup_model(self):
         if self.transfer_id is None:
-            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log=self.tb_log, full_tensorboard_log=(self.tb_log is not None), n_steps=global_config.n_steps)
+            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log=self.tb_log,
+                                      full_tensorboard_log=(self.tb_log is not None), n_steps=global_config.n_steps)
         else:
             self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
         self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_train_steps, self.initialize_time)
@@ -70,16 +71,18 @@ class Agent:
     def __setup_runners(self):
         self.runners = {}
         for environment in self.listOfGames:
-            self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment], self.model, n_steps=global_config.n_steps, gamma=0.99)
+            self.runners[environment] = myA2CRunner(environment, self.sub_proc_environments[environment],
+                                                    self.model, n_steps=global_config.n_steps, gamma=0.99)
 
     def train_for_one_episode(self, game, logging=True):
         runner = self.runners[game]
         ep_scores, policy_loss, value_loss, train_steps = self.model.multi_task_learn_for_one_episode(game, runner, self.writer)
         if logging:
             self.episode_learn += 1
-            self.total_train_step += train_steps
             self.train_step[game] += train_steps
-            log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time), total_train_step=self.total_train_step, train_step=self.train_step[game], scores=np.mean(ep_scores), policy_loss=policy_loss, value_loss=value_loss)
+            log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time),
+                                      total_train_step=self.model.train_step, train_step=self.train_step[game],
+                                      scores=np.mean(ep_scores), policy_loss=policy_loss, value_loss=value_loss)
             self.logger.log(game, log_value)
             self.data_available[self.listOfGames.index(game)] = True
             if self.episode_learn % global_config.logging_frequency == 0 and all(self.data_available) is True:
@@ -88,7 +91,7 @@ class Agent:
         return ep_scores, train_steps
 
     @staticmethod
-    def play(model_id, max_number_of_games, show_render=False):
+    def play(model_id, max_number_of_games, display=False):
         model, games = MultitaskA2C.load(model_id)
         for game in games:
             number_of_games = 0
@@ -104,13 +107,13 @@ class Agent:
                     print(sum_reward)
                     sum_reward = 0
                 sum_reward += rewards
-                if show_render is True:
+                if display is True:
                     env.render()
 
-    def save_model(self, total_train_steps, performance):
-        base_path = "./data/models/" + self.algorithm + '_' + self.initialize_time
-        name = "{:08}-{:1.2f}".format(total_train_steps, performance)
+    def save_model(self, performance):
         try:
+            base_path = "./data/models/" + self.algorithm + '_' + self.initialize_time
+            name = "{:08}-{:1.2f}".format(self.model.train_step, performance)
             if not os.path.exists(base_path):
                 os.mkdir(base_path)
             self.model.save(base_path, name)

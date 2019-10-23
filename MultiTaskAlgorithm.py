@@ -6,7 +6,9 @@ from Agent import Agent
 
 
 class MultiTaskLearning():
-    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, n_cpus, transfer_id=None, tensorboard_logging=None, verbose=1, lam=None, MetaDecider=None):
+    def __init__(self, SetOfTasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances,
+                 uniform_policy_steps, MaxTrainSteps, n_cpus, transfer_id=None, tensorboard_logging=None,
+                 verbose=1, lam=None, MetaDecider=None):
         """
 
         :param SetOfTasks:
@@ -25,11 +27,14 @@ class MultiTaskLearning():
         ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.T, MaxTrainSteps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
         if self.algorithm == "A5C":
-            self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent)
+            self.__A5C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances,
+                            uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
-            self.__EA4C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
+            self.__EA4C_init(self.T, NumberOfEpisodesForEstimating, TargetPerformances,
+                             uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
 
-    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):
+    def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances,
+                   uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
@@ -53,10 +58,9 @@ class MultiTaskLearning():
 
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
-            total_train_steps = 0
             episode_learn = 0
-            while total_train_steps < self.t:
-                if total_train_steps > self.l:
+            while self.amta.model.train_step < self.t:
+                if self.amta.model.train_step > self.l:
                     for j in range(len(self.T)):
                         self.a[j] = sum(self.s[j])/self.n
                         self.m[j] = (self.ta[self.T[j]] - self.a[j]) / (self.ta[self.T[j]]) #* self.tau) # minél kisebb annál jobban teljesít az ágens az adott gamen
@@ -64,12 +68,11 @@ class MultiTaskLearning():
                         self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
                 if episode_learn % global_config.logging_frequency == 0:
                     performance = np.mean(self.m)
-                    self.amta.save_model(total_train_steps, 1-performance)
+                    self.amta.save_model(1-performance)
                     self.amta.flush_tbw()
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.T[j])
                 episode_learn += 1
-                total_train_steps += train_steps
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
@@ -77,7 +80,8 @@ class MultiTaskLearning():
             self.amta.exit_tbw()
 
     #TODO megcsinálni
-    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
+    def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps,
+                    MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works

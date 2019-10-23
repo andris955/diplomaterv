@@ -450,7 +450,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.sess = tf_utils.make_session(graph=self.graph)
 
                 self.n_batch = self.n_envs * self.n_steps
-
+                self.observation_spaces = [self.observation_space for i in range(5)] #TODO kitörölni
                 step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
                                          reuse=False, **self.policy_kwargs)
 
@@ -659,8 +659,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             "transfer_id": self.transfer_id,
-            "max_training_step": global_config.MaxTrainSteps
-
+            "max_training_step": global_config.MaxTrainSteps,
+            "train_step": self.train_step
         }
 
         for game, value in self.action_space_dict.items():

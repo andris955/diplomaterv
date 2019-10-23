@@ -1,8 +1,6 @@
 import numpy as np
-import tensorflow as tf
 import os
 import json
-from gym.spaces import Box
 
 
 def one_hot(k, n):
@@ -14,16 +12,6 @@ def one_hot(k, n):
     v = np.zeros(n)
     v[k] = 1
     return v
-
-
-def tensorboard_logger(game, rews, advs, writer, step, obs=None):
-    summary = tf.Summary()
-    summary.value.add(tag="discounted_reward/" + game, simple_value=None)
-    summary.value.add(tag="advantage/" + game, simple_value=None)
-    for i in range(len(rews)):
-        summary.value[0].simple_value = rews[i]
-        summary.value[1].simple_value = advs[i]
-        writer.add_summary(summary, step+i)
 
 
 def read_params(transfer_id):
@@ -139,37 +127,6 @@ class Scheduler(object):
         :return: (float) the value for the current number of iterations
         """
         return self.initial_value * self.schedule(steps / self.nvalues)
-
-def observation_input(ob_spaces, batch_size):
-    for ob_space in ob_spaces:
-        if isinstance(ob_space, Box):
-            continue
-        else:
-            raise ValueError("All observation space must be a box!")
-    observation_ph = tf.placeholder(shape=(batch_size, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
-    processed_observations = tf.cast(observation_ph, tf.float32)
-    processed_observations = tf.image.resize(processed_observations, (210, 160))
-    # rescale to [1, 0] if the bounds are defined
-    if (not np.any(np.isinf(ob_spaces[0].low)) and not np.any(np.isinf(ob_spaces[0].high)) and
-       np.any((ob_spaces[0].high - ob_spaces[0].low) != 0)):
-        processed_observations = ((processed_observations - ob_spaces[0].low) / (ob_spaces[0].high - ob_spaces[0].low))
-    return observation_ph, processed_observations
-
-
-
-def find_trainable_variables(key):
-    """
-    Returns the trainable variables within a given scope
-    :param key: (str) The variable scope
-    :return: ([TensorFlow Tensor]) the trainable variables
-
-    - **removed** ``a2c.utils.find_trainable_params`` please use ``common.tf_util.get_trainable_vars`` instead.
-  ``find_trainable_params`` was returning all trainable variables, discarding the scope argument.
-  This bug was causing the model to save duplicated parameters (for DDPG and SAC)
-  but did not affect the performance.
-    """
-    with tf.variable_scope(key):
-        return tf.trainable_variables()
 
 
 def dir_check():

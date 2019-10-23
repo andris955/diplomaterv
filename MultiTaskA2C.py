@@ -1,10 +1,8 @@
 import time
-import gym
 import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
-import cv2
 import cloudpickle
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy
@@ -21,7 +19,7 @@ from TensorboardWriter import TensorboardWriter
 
 import json
 import utils
-import tf_util
+import tf_utils
 import global_config
 
 from episode_reward import EpisodeRewardCalculator
@@ -429,13 +427,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.sess = tf_util.make_session(graph=self.graph)
+            self.sess = tf_utils.make_session(graph=self.graph)
             n_batch_step = None
 
             step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, 1,
                                      n_batch_step, reuse=False, **self.policy_kwargs)
 
-            self.trainable_variables = utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
+            self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
 
     def setup_model(self, transfer=False):
@@ -446,14 +444,14 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
             self.graph = tf.Graph()
             with self.graph.as_default():
-                self.sess = tf_util.make_session(graph=self.graph)
+                self.sess = tf_utils.make_session(graph=self.graph)
 
                 self.n_batch = self.n_envs * self.n_steps
 
                 step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
                                          reuse=False, **self.policy_kwargs)
 
-                with tf.variable_scope("train_model", reuse=True, custom_getter=tf_util.outer_scope_getter("train_model")):
+                with tf.variable_scope("train_model", reuse=True, custom_getter=tf_utils.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs,
                                               self.n_steps, reuse=True, **self.policy_kwargs)
 
@@ -500,7 +498,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.value = step_model.value
                 self.initial_state = step_model.initial_state
 
-                self.trainable_variables = utils.find_trainable_variables("model")
+                self.trainable_variables = tf_utils.find_trainable_variables("model")
 
                 tf.global_variables_initializer().run(session=self.sess)
 
@@ -530,7 +528,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         assert cur_lr is not None, "Error: the observation input array cannon be empty"
 
         if writer is not None and (self.num_timesteps % 1000 == 0):
-            utils.tensorboard_logger(game, rewards, advs, writer, self.num_timesteps, obs=None)
+            tf_utils.tensorboard_logger(game, rewards, advs, writer, self.num_timesteps, obs=None)
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}

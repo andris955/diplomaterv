@@ -6,7 +6,7 @@ import os
 from stable_baselines.a2c.utils import mse, find_trainable_variables
 from stable_baselines.common import set_global_seeds
 
-import tf_util
+import tf_utils
 from MetaPolicy import MetaLstmPolicyActorCriticPolicy
 from utils import Scheduler
 
@@ -92,7 +92,7 @@ class MetaA2CModel:
 
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.sess = tf_util.make_session(graph=self.graph)
+            self.sess = tf_utils.make_session(graph=self.graph)
 
             # azért nincs step model mert ugyanaz a lépés (n_batch) így felesleges.
             policy_model = self.policy(sess=self.sess, input_length=self.input_length, output_length=self.output_length, n_batch=self.n_batch)

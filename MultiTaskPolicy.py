@@ -5,7 +5,7 @@ import tensorflow as tf
 from gym.spaces import Discrete
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc
 from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution
-from utils import observation_input
+from tf_utils import observation_input
 
 
 def shared_network(scaled_images, **kwargs):

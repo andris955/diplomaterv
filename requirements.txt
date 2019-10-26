@@ -35,7 +35,6 @@ memory-profiler==0.55.0
 mock==2.0.0
 mpi4py==3.0.1
 msgfy==0.0.5
-mujoco-py==1.50.1.68
 numpy==1.16.2
 opencv-python==4.0.0.21
 pandas==0.24.2

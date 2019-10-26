@@ -310,10 +310,10 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         model.__dict__.update(params)
         model.transfer_id.append(model_id)
 
-        # envs = [key for key in params['action_space_dict'].keys()]
         envs = params["envs"]
-        print(envs)
-        exit()
+        #print("Loaded envs: {}".format(envs))
+        #print("Envs to set: {}".format(envs_to_set_names))
+        #exit()
 
         if not transfer:
             model.setup_step_model()
@@ -323,7 +323,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
                 model.set_env(envs_to_set, envs)
                 model.setup_model(transfer=True)
             else:
-                print("The envs passed as argument is not corresponding to the envs that the model is trained on: {}".format(str(envs)))
+                print("The envs passed as argument is not corresponding to the envs that the model is trained on.\n Trained on: {} \n Passed: {}".format(envs, envs_to_set_names))
                 exit()
 
         restores = []
@@ -455,7 +455,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.sess = tf_utils.make_session(graph=self.graph)
 
                 self.n_batch = self.n_envs * self.n_steps
-                self.observation_spaces = [self.observation_space for i in range(5)] #TODO kitörölni
+
                 step_model = self.policy(self.sess, self.envs, self.observation_spaces, self.action_space_dict, self.n_envs, n_steps=1,
                                          reuse=False, **self.policy_kwargs)
 

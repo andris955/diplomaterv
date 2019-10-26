@@ -101,8 +101,8 @@ class BaseMultitaskRLModel(ABC):
 
         # sanity checking the environment
         for key, env in env_dict.items():
-            assert self.action_space_dict[key] == env.action_space, \
-                "Error: the environment passed must have at least the same action space as the model was trained on."
+            # assert self.action_space_dict[key] == env.action_space, \ #TODO átmenetileg törölve
+            #     "Error: the environment passed must have at least the same action space as the model was trained on."
             if self._requires_vec_env:
                 assert isinstance(env, VecEnv), \
                     "Error: the environment passed is not a vectorized environment, however {} requires it".format(
@@ -637,7 +637,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "policy": self.policy,
             #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
             # "observation_spaces": self.observation_spaces,
-            # "action_space_dict": self.action_space_dict,
+            "action_space_dict": self.action_space_dict,
             "n_envs": self.n_envs,
             "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,

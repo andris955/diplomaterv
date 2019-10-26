@@ -22,4 +22,4 @@ def main(algorithm, selected_mti, n_cpus, max_train_steps, uniform_policy_steps,
 
 if __name__ == '__main__':
     main(algorithm='A5C', selected_mti=global_config.MTI1, n_cpus=2, max_train_steps=global_config.MaxTrainSteps,
-         uniform_policy_steps=100, gpus=None, train=True, tensorboard_logging=None, transfer_id="A5C_19_10_17_17_56", model_id=global_config.model_id)
+         uniform_policy_steps=100, gpus=None, train=True, tensorboard_logging=None, transfer_id="A5C_19_10_24_01_58", model_id=global_config.model_id)

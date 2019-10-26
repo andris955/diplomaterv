@@ -16,9 +16,19 @@ class Logger:
 
         self.__pd_data_init()
 
+    def init_train_data(self):
+        return_data = {}
+        elapsed_time = 0
+        files = [file for file in os.listdir(self.folder_path) if file[-4:] == ".csv"]
+        for file_name in files:
+            data = pd.read_csv(os.path.join(self.folder_path, file_name), sep=";")
+            return_data[file_name[:-4]] = data.tail(1)
+            if data.tail(1)['elapsed_time'].values[0] > elapsed_time:
+                elapsed_time = data.tail(1)['elapsed_time'].values[0]
+        return return_data, elapsed_time
+
     def __save_path(self, game):
         return os.path.join(self.folder_path, game + ".csv")
-
 
     def __pd_data_init(self):
         self.data = {}

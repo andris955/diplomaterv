@@ -28,22 +28,26 @@ class Agent:
         now = now.replace(':', '_')
         now = now.replace('-', '_')
         self.initialize_time = now
-        self.transfer_id = transfer_id
+
+        self.transfer_id = None
+
+        if transfer_id is not None:
+            self.model_name = transfer_id
+            self.transfer_id = transfer_id
+        else:
+            self.model_name = self.algorithm + "_" + self.initialize_time
 
         self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step scores policy_loss value_loss")
+        self.logger = Logger(self.model_name, self.list_of_games)
 
+        data = None
         if transfer_id:
-            self.logger = Logger(transfer_id, self.list_of_games)
-        else:
-            self.logger = Logger(algorithm + "_" + self.initialize_time, self.list_of_games)
+            data, elapsed_time = self.logger.init_train_data()
+            self.start_time -= elapsed_time
 
         self.tbw = None
         self.writer = None
         self.model = None
-
-        self.train_step = {}
-        for game in list_of_games:
-            self.train_step[game] = 0
 
         self.episode_learn = 0
         self.data_available = [False]*len(self.list_of_games)
@@ -51,6 +55,14 @@ class Agent:
         self.__setup_environments()
         self.__setup_model()
         self.__setup_runners()
+
+        self.train_step = {}
+        if data is None:
+            for game in list_of_games:
+                self.train_step[game] = 0
+        else:
+            for game in list_of_games:
+                self.train_step[game] = data[game]['train_step'].values[0]
 
     def __setup_environments(self):
         for game in self.list_of_games:
@@ -112,7 +124,7 @@ class Agent:
 
     def save_model(self, performance):
         try:
-            base_path = "./data/models/" + self.algorithm + '_' + self.initialize_time
+            base_path = "./data/models/" + self.model_name
             name = "{:08}-{:1.2f}".format(self.model.train_step, performance)
             if not os.path.exists(base_path):
                 os.mkdir(base_path)

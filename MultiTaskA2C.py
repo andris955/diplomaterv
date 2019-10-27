@@ -101,8 +101,8 @@ class BaseMultitaskRLModel(ABC):
 
         # sanity checking the environment
         for key, env in env_dict.items():
-            # assert self.action_space_dict[key] == env.action_space, \
-            #     "Error: the environment passed must have at least the same action space as the model was trained on."
+            assert self.action_space_dict[key] == env.action_space, \
+                "Error: the environment passed must have at least the same action space as the model was trained on."
             if self._requires_vec_env:
                 assert isinstance(env, VecEnv), \
                     "Error: the environment passed is not a vectorized environment, however {} requires it".format(
@@ -272,7 +272,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         self.step = None
         self.proba_step = None
         self.trainable_variables = None
-        self.transfer_id = []
+        # self.transfer_id = []
 
     @abstractmethod
     def setup_model(self, transfer=False):
@@ -308,22 +308,20 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
-        model.transfer_id.append(model_id)
+        # model.transfer_id.append(model_id)
 
-        envs = params["envs"]
-        #print("Loaded envs: {}".format(envs))
-        #print("Envs to set: {}".format(envs_to_set_names))
-        #exit()
+        tasks = params["tasks"]
 
         if not transfer:
             model.setup_step_model()
         else:
-            envs_to_set_names = [key for key in envs_to_set.keys()]
-            if envs == envs_to_set_names:
-                model.set_env(envs_to_set, envs)
+            tasks_to_set = [key for key in envs_to_set.keys()]
+            if tasks == tasks_to_set:
+                model.set_env(envs_to_set, tasks)
                 model.setup_model(transfer=True)
             else:
-                print("The envs passed as argument is not corresponding to the envs that the model is trained on.\n Trained on: {} \n Passed: {}".format(envs, envs_to_set_names))
+                print("The envs passed as argument is not corresponding to the envs that the model "
+                      "is trained on.\n Trained on: {} \n Passed: {}".format(tasks, tasks_to_set))
                 exit()
 
         restores = []
@@ -333,7 +331,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         model.sess.graph.finalize()
 
-        return model, envs
+        return model, tasks
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -659,12 +657,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "alpha": self.alpha,
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
-            "verbose": self.verbose,
+            # "verbose": self.verbose,
             "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
             "action_spaces": {},
             "n_envs_per_task": self.n_envs_per_task,
-            "_vectorize_action": self._vectorize_action,
-            "transfer_id": self.transfer_id,
+            # "_vectorize_action": self._vectorize_action,
+            # "transfer_id": self.transfer_id,
             "max_training_step": global_config.MaxTrainSteps,
             "train_step": self.train_step
         }

@@ -7,7 +7,7 @@ from Agent import Agent
 
 class MultiTaskLearning():
     def __init__(self, set_of_tasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances,
-                 uniform_policy_steps, max_train_steps, n_cpus, transfer_id=None, tensorboard_logging=None,
+                 uniform_policy_steps, max_train_steps, n_cpus, logging=True, transfer_id=None, tensorboard_logging=None,
                  verbose=1, lam=None, MetaDecider=None):
         """
 
@@ -18,12 +18,14 @@ class MultiTaskLearning():
             if set_of_tasks is not None:
                 print("The given set of tasks is overwritten by the tasks used by the referred model (transfer_id).")
             params = read_params(transfer_id)
-            self.tasks = params['envs']
+            self.tasks = params['tasks']
         else:
             self.tasks = set_of_tasks
 
         self.algorithm = Algorithm
         self.verbose = verbose
+        self.logging = logging
+
         ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.tasks, max_train_steps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
         if self.algorithm == "A5C":
@@ -73,7 +75,7 @@ class MultiTaskLearning():
                     self.amta.save_model(performance)
                     self.amta.flush_tbw()
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
+                ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j], logging=self.logging)
                 episode_learn += 1
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
@@ -112,7 +114,7 @@ class MultiTaskLearning():
         for train_step in range(self.t):
             j = self.p.index(max(self.p))
             self.c[j] = self.c[j] + 1
-            scores = self.amta.train_for_one_episode(self.tasks[j])
+            scores = self.amta.train_for_one_episode(self.tasks[j], logging=self.logging)
             self.s[j].append(np.mean(scores))
             if len(self.s[j]) > self.n:
                 self.s[j].pop(0)

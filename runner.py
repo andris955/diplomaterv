@@ -28,7 +28,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
         mb_states = self.states
         for _ in range(self.n_steps):
-            actions, values, _ = self.model.step(self.env_name, self.obs)
+            actions, values, states, _ = self.model.step(self.env_name, self.obs, self.states, self.dones)
             if isinstance(self.env.action_space, gym.spaces.Discrete):
                 actions = np.clip(actions, 0, self.env.action_space.n)
             mb_obs.append(np.copy(self.obs))
@@ -37,6 +37,8 @@ class myA2CRunner(AbstractEnvRunner):
             mb_dones.append(self.dones)
 
             obs, rewards, dones, _ = self.env.step(actions)
+
+            self.states = states
             self.dones = dones
             self.obs = obs
             mb_rewards.append(rewards)
@@ -51,7 +53,7 @@ class myA2CRunner(AbstractEnvRunner):
         mb_masks = mb_dones[:, :-1] # lépés meglépése előtt mi volt az állapot
         mb_dones = mb_dones[:, 1:] # lépés meglépése után mi az állapot
         true_rewards = np.copy(mb_rewards)
-        last_values = self.model.value(self.env_name, self.obs).tolist()
+        last_values = self.model.value(self.env_name, self.obs, self.states, self.dones).tolist()
         # discount/bootstrap off value fn
         for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
             rewards = rewards.tolist()

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import os
 import cloudpickle
 
-from MultiTaskPolicy import MultiTaskActorCriticPolicy
+from MultiTaskPolicy import MultiTaskActorCriticPolicy, MultiTaskLSTMA2CPolicy
 
 from stable_baselines.common.policies import LstmPolicy
 from stable_baselines.common.vec_env import VecEnv
@@ -413,7 +413,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 n_batch_step = None
                 n_batch_train = None
-                if issubclass(self.policy, LstmPolicy):
+                if issubclass(self.policy, MultiTaskLSTMA2CPolicy):
                     n_batch_step = self.n_envs_per_task
                     n_batch_train = self.n_envs_per_task * self.n_steps
 

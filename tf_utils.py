@@ -10,13 +10,16 @@ import tensorflow as tf
 from stable_baselines import logger
 
 
-def observation_input(ob_spaces, batch_size):
+def observation_input(ob_spaces, batch_size, recurrent):
     for ob_space in ob_spaces:
         if isinstance(ob_space, Box):
             continue
         else:
             raise ValueError("All observation space must be a box!")
-    observation_ph = tf.placeholder(shape=(None, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
+    if recurrent:
+        observation_ph = tf.placeholder(shape=(batch_size, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
+    else:
+        observation_ph = tf.placeholder(shape=(None, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
     processed_observations = tf.cast(observation_ph, tf.float32)
     processed_observations = tf.image.resize(processed_observations, (210, 160))
     # rescale to [1, 0] if the bounds are defined

@@ -53,8 +53,6 @@ class BaseMultiTaskPolicy(ABC):
             self.n_batch = self.n_envs_per_task * self.n_steps
         else:
             self.n_batch = n_batch
-        with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(ob_spaces, self.n_batch)
         self.sess = sess
         self.reuse = reuse
         self.ob_spaces = ob_spaces
@@ -171,6 +169,9 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=False, feature_extractor=shared_network):
         super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=reuse)
 
+        with tf.variable_scope("input", reuse=False):
+            self.obs_ph, self.processed_obs = observation_input(ob_spaces, self.n_batch, recurrent=False)
+
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = feature_extractor(self.processed_obs)
 
@@ -193,7 +194,7 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
         else:
             action, value, neglogp = self.sess.run([self.action[task], self._value[task], self.neglogp[task]],
                                                    {self.obs_ph: obs})
-        return action, value, neglogp
+        return action, value, state, neglogp
 
     def proba_step(self, task, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba[task], {self.obs_ph: obs})
@@ -221,8 +222,10 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
 
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, n_lstm=256, reuse=False,
                  feature_extractor=shared_network, layer_norm=False):
-
         super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse)
+
+        with tf.variable_scope("input", reuse=False):
+            self.obs_ph, self.processed_obs = observation_input(ob_spaces, self.n_batch, recurrent=True)
 
         with tf.variable_scope("input", reuse=True):
             self.masks_ph = tf.placeholder(tf.float32, [n_batch], name="masks_ph")  # mask (done t-1)
@@ -233,7 +236,7 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
             extracted_features = feature_extractor(self.processed_obs)
             input_sequence = batch_to_seq(extracted_features, self.n_envs_per_task, n_steps)
             masks = batch_to_seq(self.masks_ph, self.n_envs_per_task, n_steps)
-            rnn_output, self.snew = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)
+            rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)
             latent_vector = seq_to_batch(rnn_output)
 
         for key in self.pdtype_dict.keys():
@@ -250,10 +253,10 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
 
     def step(self, task, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            return self.sess.run([self.deterministic_action[task], self._value[task], self.snew, self.neglogp[task]],
+            return self.sess.run([self.deterministic_action[task], self._value[task], self.state_new, self.neglogp[task]],
                                  {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
         else:
-            return self.sess.run([self.action[task], self._value[task], self.snew, self.neglogp[task]],
+            return self.sess.run([self.action[task], self._value[task], self.state_new, self.neglogp[task]],
                                  {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
 
     def proba_step(self, task, obs, state=None, mask=None):

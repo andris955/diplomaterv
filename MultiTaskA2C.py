@@ -416,7 +416,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self._setup_learn(seed)
         self.total_train_steps = max_train_steps
         self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=self.total_train_steps,
-                                                      schedule=self.lr_schedule, init_step=self.num_timesteps)
+                                                      schedule=self.lr_schedule, init_step=self.train_step)
         self.episode_reward = {}
         for key in self.env_dict.keys():
             self.episode_reward[key] = np.zeros((self.n_envs,))
@@ -586,14 +586,15 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         while mask != [True]*self.n_envs:
             t_start = time.time()
             # true_reward is the reward without discount
-            self.updates = self.num_timesteps // self.n_batch + 1
+            # self.updates = self.num_timesteps // self.n_batch + 1
+            self.train_step += 1
             obs, states, rewards, masks, actions, values, true_rewards, dones = runner.run()
-            policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.updates, writer)
+            policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.train_step, writer)
             n_seconds = time.time() - t_start
             fps = int(self.n_batch / n_seconds)
 
             tmp_ep_scores = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs, self.n_steps)),
-                                                           masks.reshape((self.n_envs, self.n_steps)), self.num_timesteps)
+                                                           masks.reshape((self.n_envs, self.n_steps)), self.train_step)
 
             masks_reshaped = masks.reshape((self.n_envs, self.n_steps))
             assert masks_reshaped.shape[0] == self.n_envs, "dones.shape[0] must be n_envs"
@@ -605,11 +606,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
             self.num_timesteps += self.n_batch
             ep_train_step += 1
-            self.train_step += 1
 
-            if self.verbose >= 1 and (self.updates % log_interval == 0):
+            if self.verbose >= 1 and (self.train_step % log_interval == 0):
                 explained_var = explained_variance(values, rewards)
-                logger.record_tabular("training_updates", self.updates)
+                logger.record_tabular("training_updates", self.train_step)
                 logger.record_tabular("total_timesteps", self.num_timesteps)
                 logger.record_tabular("fps", fps)
                 logger.record_tabular("policy_entropy", float(policy_entropy))

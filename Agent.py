@@ -56,6 +56,7 @@ class Agent:
         self.__setup_model()
         self.__setup_runners()
 
+        #TODO total train step bugos logolásnál
         self.train_step = {}
         if data is None:
             for game in list_of_games:

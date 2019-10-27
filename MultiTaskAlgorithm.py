@@ -69,7 +69,7 @@ class MultiTaskLearning():
                 if episode_learn % global_config.logging_frequency == 0:
                     performance = [1-m for m in self.m]
                     performance = [np.min([m, 1]) for m in performance]
-                    performance = np.mean(performance)
+                    performance = np.mean(performance)  # qam
                     self.amta.save_model(performance)
                     self.amta.flush_tbw()
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)

@@ -6,13 +6,13 @@ from Agent import Agent
 
 
 class MultiTaskLearning():
-    def __init__(self, set_of_tasks, Algorithm, NumberOfEpisodesForEstimating, TargetPerformances,
+    def __init__(self, set_of_tasks, algorithm, policy, number_of_episodes_for_estimating, target_performances,
                  uniform_policy_steps, max_train_steps, n_cpus, logging=True, transfer_id=None, tensorboard_logging=None,
-                 verbose=1, lam=None, MetaDecider=None):
+                 verbose=1, lam=None, meta_decider=None):
         """
 
         :param set_of_tasks:
-        :param Algorithm: Chosen multi-task algorithm. Available: 'A5C','EA4C' ...
+        :param algorithm: Chosen multi-task algorithm. Available: 'A5C','EA4C' ...
         """
         if transfer_id is not None:
             if set_of_tasks is not None:
@@ -22,18 +22,18 @@ class MultiTaskLearning():
         else:
             self.tasks = set_of_tasks
 
-        self.algorithm = Algorithm
+        self.algorithm = algorithm
         self.verbose = verbose
         self.logging = logging
 
-        ActiveSamplingMultiTaskAgent = Agent(Algorithm, self.tasks, max_train_steps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
+        ActiveSamplingMultiTaskAgent = Agent(algorithm, policy, self.tasks, max_train_steps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
 
         if self.algorithm == "A5C":
-            self.__A5C_init(self.tasks, NumberOfEpisodesForEstimating, TargetPerformances,
+            self.__A5C_init(self.tasks, number_of_episodes_for_estimating, target_performances,
                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
-            self.__EA4C_init(self.tasks, NumberOfEpisodesForEstimating, TargetPerformances,
-                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent, MetaDecider, lam)
+            self.__EA4C_init(self.tasks, number_of_episodes_for_estimating, target_performances,
+                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent, meta_decider, lam)
 
     def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances,
                    uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):

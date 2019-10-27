@@ -1,6 +1,5 @@
 from MultiTaskA2C import MultitaskA2C
 from runner import myA2CRunner
-from MultiTaskPolicy import MultiTaskA2CPolicy
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
 import global_config
@@ -11,15 +10,14 @@ from collections import namedtuple
 import time
 import numpy as np
 
-
 class Agent:
-    def __init__(self, algorithm, list_of_games, max_train_steps, n_cpus, transfer_id, tensorboard_logging):
+    def __init__(self, algorithm, policy, list_of_games, max_train_steps, n_cpus, transfer_id, tensorboard_logging):
         self.algorithm = algorithm
         self.list_of_games = list_of_games
         self.max_train_steps = max_train_steps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
-        self.policy = MultiTaskA2CPolicy
+        self.policy = policy
         self.tb_log = tensorboard_logging
         self.start_time = time.time()
 
@@ -56,7 +54,6 @@ class Agent:
         self.__setup_model()
         self.__setup_runners()
 
-        #TODO total train step bugos logolásnál
         self.train_step = {}
         if data is None:
             for game in list_of_games:
@@ -73,11 +70,12 @@ class Agent:
 
     def __setup_model(self):
         if self.transfer_id is None:
-            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, verbose=1, tensorboard_log=self.tb_log,
+            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, tensorboard_log=self.tb_log,
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=global_config.n_steps)
         else:
             self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
-        self.tbw = self.model._setup_multitask_learn(self.algorithm, self.max_train_steps, self.initialize_time)
+
+        self.tbw = self.model._setup_multitask_learn(self.model_name, self.max_train_steps)
         if self.tbw is not None:
             self.writer = self.tbw.writer
 

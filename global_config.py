@@ -51,9 +51,12 @@ number_of_episodes_for_estimating = 10
 uniform_policy_steps = 1_000_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
 MaxTrainSteps = 10_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
 tau = 1
-n_steps = 5
+
+n_steps = 10
 
 logging_frequency = 10  # number of episodes
+
+verbose = 1
 
 tensorboard_log = "./data/tb_logs"
 

@@ -7,7 +7,7 @@ import cloudpickle
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy
 
-from stable_baselines.common.policies import LstmPolicy, get_policy_from_name
+from stable_baselines.common.policies import LstmPolicy
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common import set_global_seeds
@@ -32,25 +32,18 @@ class BaseMultitaskRLModel(ABC):
     :param policy: (BasePolicy) Policy object
     :param env_dict: (Dictionary of Gym environments) The environment to learn from
                 (if registered in Gym, can be str. Can be None for loading trained models)
-    :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
-    :param requires_vec_env: (bool) Does this model require a vectorized environment
-    :param policy_base: (BasePolicy) the base policy used by this method
     """
 
-    def __init__(self, policy, env_dict, verbose=0, *, requires_vec_env, policy_base, policy_kwargs=None):
-        if isinstance(policy, str):
-            self.policy = get_policy_from_name(policy_base, policy)
-        else:
-            self.policy = policy
+    def __init__(self, policy_name, env_dict):
+        self.policy_name = policy_name
+        self.policy = utils.get_policy_from_string(self.policy_name)
         self.env_dict = env_dict
         self.tasks = [key for key in self.env_dict.keys()] if self.env_dict is not None else None
-        self.verbose = verbose
-        self._requires_vec_env = requires_vec_env
-        self.policy_kwargs = {} if policy_kwargs is None else policy_kwargs
+        self.verbose = global_config.verbose
         self.observation_spaces = []
         self.action_space_dict = {}
         self.n_envs_per_task = None
-        self._vectorize_action = False
+        # self._vectorize_action = False
         self.num_timesteps = 0
 
         if env_dict is not None:
@@ -59,23 +52,19 @@ class BaseMultitaskRLModel(ABC):
             for key in env_dict.keys():
                 self.observation_spaces.append(env_dict[key].observation_space)
                 self.action_space_dict[key] = env_dict[key].action_space
-            if requires_vec_env:
-                for key in self.env_dict.keys():
-                    if isinstance(self.env_dict[key], VecEnv):
+            for key in self.env_dict.keys():
+                if isinstance(self.env_dict[key], VecEnv):
+                    if env_dict[key].num_envs == 1:
+                        self.env_dict[key] = _UnvecWrapper(env_dict[key])
+                        self._vectorize_action = True
+                    if self.n_envs_per_task is None:
                         self.n_envs_per_task = self.env_dict[key].num_envs
-                        break
                     else:
-                        raise ValueError("Error: the model requires a vectorized environment, please use a VecEnv wrapper.")
-            else:
-                for key, env in self.env_dict.items():
-                    if isinstance(env, VecEnv):
-                        if env.num_envs == 1:
-                            self.env_dict[key] = _UnvecWrapper(env)
-                            self._vectorize_action = True
-                        else:
-                            raise ValueError("Error: the model requires a non vectorized environment or a single vectorized"
-                                             " environment.")
-                    self.n_envs_per_task = 1
+                        if self.n_envs_per_task != self.env_dict[key].num_envs:
+                            raise ValueError("All tasks must have the same number of environments ")
+                    break
+                else:
+                    raise ValueError("Error: the model requires a vectorized environment, please use a VecEnv wrapper.")
 
     def get_envs(self):
         """
@@ -103,28 +92,13 @@ class BaseMultitaskRLModel(ABC):
         for key, env in env_dict.items():
             assert self.action_space_dict[key] == env.action_space, \
                 "Error: the environment passed must have at least the same action space as the model was trained on."
-            if self._requires_vec_env:
-                assert isinstance(env, VecEnv), \
-                    "Error: the environment passed is not a vectorized environment, however {} requires it".format(
-                        self.__class__.__name__)
-                assert not issubclass(self.policy, LstmPolicy) or self.n_envs_per_task == env.num_envs, \
-                    "Error: the environment passed must have the same number of environments as the model was trained on." \
-                    "This is due to the Lstm policy not being capable of changing the number of environments."
-                self.n_envs_per_task = env.num_envs
-            else:
-                # for models that dont want vectorized environment, check if they make sense and adapt them.
-                # Otherwise tell the user about this issue
-                if isinstance(env, VecEnv):
-                    if env.num_envs == 1:
-                        env_dict[key] = _UnvecWrapper(env)
-                        self._vectorize_action = True
-                    else:
-                        raise ValueError("Error: the model requires a non vectorized environment or a single vectorized "
-                                         "environment.")
-                else:
-                    self._vectorize_action = False
-
-                self.n_envs_per_task = 1
+            assert isinstance(env, VecEnv), \
+                "Error: the environment passed is not a vectorized environment, however {} requires it".format(
+                    self.__class__.__name__)
+            assert not issubclass(self.policy, LstmPolicy) or self.n_envs_per_task == env.num_envs, \
+                "Error: the environment passed must have the same number of environments as the model was trained on." \
+                "This is due to the Lstm policy not being capable of changing the number of environments."
+            self.n_envs_per_task = env.num_envs
 
         self.env_dict = env_dict
         self.tasks = tasks
@@ -132,23 +106,8 @@ class BaseMultitaskRLModel(ABC):
         for key in self.tasks:
             self.action_space_dict[key] = self.env_dict[key].action_space
 
-    def _init_num_timesteps(self, reset_num_timesteps=True):
-        """
-        Initialize and resets num_timesteps (total timesteps since beginning of training)
-        if needed. Mainly used logging and plotting (tensorboard).
-
-        :param reset_num_timesteps: (bool) Set it to false when continuing training
-            to not create new plotting curves in tensorboard.
-        :return: (bool) Whether a new tensorboard log needs to be created
-        """
-        if reset_num_timesteps:
-            self.num_timesteps = 0
-
-        new_tb_log = self.num_timesteps == 0
-        return new_tb_log
-
     @abstractmethod
-    def setup_model(self, transfer=False):
+    def setup_train_model(self, transfer=False):
         """
         Create all the functions and tensorflow graphs necessary to train the model
         """
@@ -254,28 +213,24 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     """
     The base class for Actor critic model
 
-    :param policy: (BasePolicy) Policy object
+    :param policy: (str)
+    :param _init_steup_model: (Bool) A loadhoz kell!
     :param env_dict: (Dictionary of Gym environments) The environment to learn from
                 (if registered in Gym, can be str. Can be None for loading trained models)
-    :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
     :param policy_base: (BasePolicy) the base policy used by this method (default=ActorCriticPolicy)
-    :param requires_vec_env: (bool) Does this model require a vectorized environment
     """
 
-    def __init__(self, policy, env_dict, _init_setup_model, verbose=0, policy_base=MultiTaskActorCriticPolicy,
-                 requires_vec_env=False, policy_kwargs=None):
-        super(ActorCriticMultitaskRLModel, self).__init__(policy, env_dict, verbose=verbose, requires_vec_env=requires_vec_env,
-                                                          policy_base=policy_base, policy_kwargs=policy_kwargs)
+    def __init__(self, policy, env_dict, _init_setup_model):
+        super(ActorCriticMultitaskRLModel, self).__init__(policy, env_dict)
 
         self.sess = None
         self.initial_state = None
         self.step = None
-        self.proba_step = None
         self.trainable_variables = None
         # self.transfer_id = []
 
     @abstractmethod
-    def setup_model(self, transfer=False):
+    def setup_train_model(self, transfer=False):
         pass
 
     @abstractmethod
@@ -283,7 +238,13 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     def predict(self, game, observation, state=None, mask_dict=None, deterministic=False):
+        if state is None:
+            state = self.initial_state
+        if mask_dict is None:
+            mask_dict = None #TODO #[False for _ in range(self.n_envs)]
+
         observation = np.array(observation)
+        vectorized_env = utils._is_vectorized_observation(observation, self.observation_spaces[game])
         assert isinstance(game, str), "Error: the game passed is not a string"
 
         try:
@@ -294,6 +255,11 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         observation = observation.reshape((-1,) + observation.shape)
         actions, _, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
+
+        if not vectorized_env:
+            if state is not None:
+                raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
+            actions = actions[0]
 
         return actions
 
@@ -318,7 +284,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             tasks_to_set = [key for key in envs_to_set.keys()]
             if tasks == tasks_to_set:
                 model.set_env(envs_to_set, tasks)
-                model.setup_model(transfer=True)
+                model.setup_train_model(transfer=True)
             else:
                 print("The envs passed as argument is not corresponding to the envs that the model "
                       "is trained on.\n Trained on: {} \n Passed: {}".format(tasks, tasks_to_set))
@@ -341,7 +307,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
     The A2C (Advantage Actor Critic) model class, https://arxiv.org/abs/1602.01783
 
-    :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
+    :param policy: (str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env_dict: (Dictionary of environments) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
     :param n_steps: (int) The number of steps to run for each environment per update
@@ -355,21 +321,18 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         (default: 1e-5)
     :param lr_schedule: (str) The type of scheduler for the learning rate update ('linear', 'constant',
                               'double_linear_con', 'middle_drop' or 'double_middle_drop')
-    :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
     :param tensorboard_log: (str) the log location for tensorboard (if None, no logging)
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
                               (used only for loading)
-    :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         WARNING: this logging can take a lot of space quickly
     """
 
     def __init__(self, policy, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=1, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
+                 learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', tensorboard_log=None,
+                 _init_setup_model=True, full_tensorboard_log=False):
 
-        super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, verbose=verbose, requires_vec_env=True,
-                                           _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
+        super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, _init_setup_model=_init_setup_model)
 
         self.n_steps = n_steps
         self.gamma = gamma
@@ -400,26 +363,20 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.learning_rate_schedule = None
         self.summary = None
         self.episode_reward = None
-        self.updates = None
         self.total_train_steps = None
         self.train_step = 0
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
-            self.setup_model()
+            self.setup_train_model()
 
-    def _setup_multitask_learn(self, algorithm, max_train_steps, initialize_time, seed=3):
-        _ = self._init_num_timesteps(True)
-
+    def _setup_multitask_learn(self, model_name, max_train_steps, seed=3):
         self._setup_learn(seed)
         self.total_train_steps = max_train_steps
         self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=self.total_train_steps,
                                                       schedule=self.lr_schedule, init_step=self.train_step)
-        self.episode_reward = {}
-        for key in self.env_dict.keys():
-            self.episode_reward[key] = np.zeros((self.n_envs_per_task,))
 
-        tbw = TensorboardWriter(self.graph, self.tensorboard_log, algorithm, initialize_time)
+        tbw = TensorboardWriter(self.graph, self.tensorboard_log, model_name)
 
         if tbw is not None:
             self.episode_reward = EpisodeRewardCalculator([key for key in self.env_dict.keys()], self.n_envs_per_task, tbw.writer)
@@ -437,16 +394,16 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.sess = tf_utils.make_session(graph=self.graph)
 
             step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                     reuse=False, **self.policy_kwargs)
+                                     reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
 
-    def setup_model(self, transfer=False):
+    def setup_train_model(self, transfer=False):
         with SetVerbosity(self.verbose):
 
             assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                        "instance of common.policies.ActorCriticPolicy."
+                                                                        "instance of MultiTaskActorCriticPolicy."
 
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -454,12 +411,18 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.n_batch = self.n_envs_per_task * self.n_steps
 
+                n_batch_step = None
+                n_batch_train = None
+                if issubclass(self.policy, LstmPolicy):
+                    n_batch_step = self.n_envs_per_task
+                    n_batch_train = self.n_envs_per_task * self.n_steps
+
                 step_model = self.policy(self.sess, self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                         reuse=False, **self.policy_kwargs)
+                                         n_batch=n_batch_step, reuse=False)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_utils.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task,
-                                              self.n_steps, reuse=True, **self.policy_kwargs)
+                                              self.n_steps, n_batch_train, reuse=True)
 
                 with tf.variable_scope("loss", reuse=False):
                     self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
@@ -500,7 +463,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.train_model = train_model
                 self.step_model = step_model
                 self.step = step_model.step
-                self.proba_step = step_model.proba_step
                 self.value = step_model.value
                 self.initial_state = step_model.initial_state
 
@@ -539,9 +501,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
 
-        # if states is not None:
-        #     td_map[self.train_model.states_ph] = states
-        #     td_map[self.train_model.masks_ph] = masks
+        if states is not None:
+            td_map[self.train_model.states_ph] = states
+            td_map[self.train_model.masks_ph] = masks
 
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
@@ -632,21 +594,21 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
-            "policy": self.policy,
+            "policy": self.policy_name,
             #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
             # "observation_spaces": self.observation_spaces,
             "action_space_dict": self.action_space_dict,
             "n_envs_per_task": self.n_envs_per_task,
-            "_vectorize_action": self._vectorize_action,
+            # "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
-            "transfer_id": self.transfer_id,
+            # "transfer_id": self.transfer_id,
             "total_train_steps": self.total_train_steps,
             "train_step": self.train_step,
-            "policy_kwargs": self.policy_kwargs
         }
 
         json_params = {
+            "policy": self.policy_name,
             "tasks": self.tasks,
             "gamma": self.gamma,
             "n_steps": self.n_steps,

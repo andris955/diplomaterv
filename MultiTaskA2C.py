@@ -101,8 +101,8 @@ class BaseMultitaskRLModel(ABC):
 
         # sanity checking the environment
         for key, env in env_dict.items():
-            assert self.action_space_dict[key] == env.action_space, \
-                "Error: the environment passed must have at least the same action space as the model was trained on."
+            # assert self.action_space_dict[key] == env.action_space, \
+            #     "Error: the environment passed must have at least the same action space as the model was trained on."
             if self._requires_vec_env:
                 assert isinstance(env, VecEnv), \
                     "Error: the environment passed is not a vectorized environment, however {} requires it".format(
@@ -610,9 +610,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             if self.verbose >= 1 and (self.train_step % log_interval == 0):
                 explained_var = explained_variance(values, rewards)
                 logger.record_tabular("training_updates", self.train_step)
-                logger.record_tabular("total_timesteps", self.num_timesteps)
+                # logger.record_tabular("total_timesteps", self.num_timesteps)
                 logger.record_tabular("fps", fps)
-                logger.record_tabular("policy_entropy", float(policy_entropy))
+                logger.record_tabular("policy_loss", float(policy_loss))
                 logger.record_tabular("value_loss", float(value_loss))
                 logger.record_tabular("explained_variance", float(explained_var))
                 logger.dump_tabular()

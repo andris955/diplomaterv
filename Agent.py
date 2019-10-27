@@ -37,7 +37,7 @@ class Agent:
         else:
             self.model_name = self.algorithm + "_" + self.initialize_time
 
-        self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step scores policy_loss value_loss")
+        self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step relative_performance scores policy_loss value_loss")
         self.logger = Logger(self.model_name, self.list_of_games)
 
         data = None
@@ -95,7 +95,8 @@ class Agent:
             self.train_step[game] += train_steps
             log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time),
                                       total_train_step=self.model.train_step, train_step=self.train_step[game],
-                                      scores=np.mean(ep_scores), policy_loss=policy_loss, value_loss=value_loss)
+                                      relative_performance=np.mean(ep_scores) / global_config.target_performances[game], scores=np.mean(ep_scores),
+                                      policy_loss=policy_loss, value_loss=value_loss)
             self.logger.log(game, log_value)
             self.data_available[self.list_of_games.index(game)] = True
             if self.episode_learn % global_config.logging_frequency == 0 and all(self.data_available) is True:

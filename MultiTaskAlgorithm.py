@@ -67,8 +67,10 @@ class MultiTaskLearning():
                     for j in range(len(self.tasks)):
                         self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
                 if episode_learn % global_config.logging_frequency == 0:
-                    performance = np.mean(self.m)
-                    self.amta.save_model(1-performance)
+                    performance = [1-m for m in self.m]
+                    performance = [np.min([m, 1]) for m in performance]
+                    performance = np.mean(performance)
+                    self.amta.save_model(performance)
                     self.amta.flush_tbw()
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])

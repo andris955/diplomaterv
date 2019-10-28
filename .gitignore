@@ -105,6 +105,8 @@ data/
 /site
 .idea
 .idea/
+.original
+original/
 
 # mypy
 .mypy_cache/

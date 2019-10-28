@@ -49,6 +49,8 @@ class BaseMultiTaskPolicy(ABC):
         self.n_envs_per_task = n_envs_per_task
         self.tasks = tasks
         self.n_steps = n_steps
+        with tf.variable_scope("input", reuse=False):
+            self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_batch)
         if n_batch is None:
             self.n_batch = self.n_envs_per_task * self.n_steps
         else:
@@ -169,9 +171,6 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=False, feature_extractor=shared_network):
         super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=reuse)
 
-        with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(ob_spaces, self.n_batch, recurrent=False)
-
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = feature_extractor(self.processed_obs)
 
@@ -224,9 +223,6 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
                  feature_extractor=shared_network, layer_norm=False):
         super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse)
 
-        with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(ob_spaces, self.n_batch, recurrent=True)
-
         with tf.variable_scope("input", reuse=True):
             self.masks_ph = tf.placeholder(tf.float32, [n_batch], name="masks_ph")  # mask (done t-1)
             # n_lstm * 2 dim because of the cell and hidden states of the LSTM
@@ -253,11 +249,13 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
 
     def step(self, task, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            return self.sess.run([self.deterministic_action[task], self._value[task], self.state_new, self.neglogp[task]],
+            action, value, state, neglogp = self.sess.run([self.deterministic_action[task], self._value[task], self.state_new, self.neglogp[task]],
                                  {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
         else:
-            return self.sess.run([self.action[task], self._value[task], self.state_new, self.neglogp[task]],
+            action, value, state, neglogp = self.sess.run([self.action[task], self._value[task], self.state_new, self.neglogp[task]],
                                  {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
+
+        return action, value, state, neglogp
 
     def proba_step(self, task, obs, state=None, mask=None):
         return self.sess.run(self.policy_proba[task], {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})

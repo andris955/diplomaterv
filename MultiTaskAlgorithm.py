@@ -2,13 +2,14 @@ import global_config
 import numpy as np
 from utils import one_hot, read_params
 from stable_baselines.common import SetVerbosity
-from Agent import Agent
+from MultiTaskAgent import MultiTaskAgent
+from MetaAgent import MetaAgent
 
 
-class MultiTaskLearning():
+class MultiTaskLearning:
     def __init__(self, set_of_tasks, algorithm, policy, number_of_episodes_for_estimating, target_performances,
                  uniform_policy_steps, max_train_steps, n_cpus, logging=True, transfer_id=None, tensorboard_logging=None,
-                 verbose=1, lam=None, meta_decider=None):
+                 verbose=1, lambda_=None):
         """
 
         :param set_of_tasks:
@@ -26,14 +27,17 @@ class MultiTaskLearning():
         self.verbose = verbose
         self.logging = logging
 
-        ActiveSamplingMultiTaskAgent = Agent(algorithm, policy, self.tasks, max_train_steps, n_cpus, transfer_id, tensorboard_logging=tensorboard_logging)
+        ActiveSamplingMultiTaskAgent = MultiTaskAgent(algorithm, policy, self.tasks, global_config.n_steps, max_train_steps, n_cpus,
+                                                      transfer_id, tensorboard_logging=tensorboard_logging)
+
+        meta_decider = None
 
         if self.algorithm == "A5C":
             self.__A5C_init(self.tasks, number_of_episodes_for_estimating, target_performances,
                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent)
         elif self.algorithm == "EA4C":
             self.__EA4C_init(self.tasks, number_of_episodes_for_estimating, target_performances,
-                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent, meta_decider, lam)
+                             uniform_policy_steps, max_train_steps, ActiveSamplingMultiTaskAgent, meta_decider, lambda_)
 
     def __A5C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances,
                    uniform_policy_steps, MaxTrainSteps, ActiveSamplingMultiTaskAgent):
@@ -47,6 +51,7 @@ class MultiTaskLearning():
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.a = []  # Average scores for every task
         self.m = []
+        assert isinstance(ActiveSamplingMultiTaskAgent, MultiTaskAgent)
         self.amta = ActiveSamplingMultiTaskAgent  # The Active Sampling multi-tasking agent
         self.p = []  # Probability of training on an episode of task Ti next.
         self.tau = global_config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
@@ -61,6 +66,7 @@ class MultiTaskLearning():
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
             episode_learn = 0
+            performance = 0
             while self.amta.model.train_step < self.t:
                 if self.amta.model.train_step > self.l:
                     for j in range(len(self.tasks)):
@@ -80,12 +86,11 @@ class MultiTaskLearning():
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
-            self.amta.save_model()
+            self.amta.save_model(performance)
             self.amta.exit_tbw()
 
-    #TODO megcsinálni
     def __EA4C_init(self, SetOfTasks, NumberOfEpisodesForEstimating, TargetPerformances, uniform_policy_steps,
-                    MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lam):
+                    MaxTrainSteps, ActiveSamplingMultiTaskAgent, MetaLearningAgent, lambda_):
         assert isinstance(SetOfTasks, list), "SetOfTask must be a list"
         assert isinstance(TargetPerformances, dict), "TargetPerformance must be a dictionary"
         self.ta = TargetPerformances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
@@ -97,12 +102,14 @@ class MultiTaskLearning():
         self.c = np.zeros(len(self.tasks))  # Count of the number of training episodes of task Ti.
         self.r1 = 0
         self.r2 = 0  # First & second component of the reward for meta-learner, defined in lines 93-94
-        self.r = 0  # Reward for meta-learner
+        self.reward = 0  # Reward for meta-learner
         self.l = uniform_policy_steps  # Number of tasks to consider in the computation of r2.
         self.s_avg = []  # Average scores for every task
+        assert isinstance(ActiveSamplingMultiTaskAgent, MultiTaskAgent)
         self.amta = ActiveSamplingMultiTaskAgent  # The Active Sampling multi-tasking agent
-        self.ma = MetaLearningAgent # Meta Learning Agent.
-        self.lam = lam # Lambda weighting.
+        assert isinstance(MetaLearningAgent, MetaAgent)
+        self.ma = MetaLearningAgent # Meta Learning MultiTaskAgent.
+        self.lambda_ = lambda_ # Lambda weighting.
         for _ in range(len(self.tasks)):
             self.p.append(1 / len(self.tasks))
         for i in range(len(self.tasks)):
@@ -111,6 +118,7 @@ class MultiTaskLearning():
             self.s_avg.append(0.0)
 
     def __EA4C_train(self):
+        performance = 0
         for train_step in range(self.t):
             j = self.p.index(max(self.p))
             self.c[j] = self.c[j] + 1
@@ -123,11 +131,12 @@ class MultiTaskLearning():
             s_avg_norm = [self.s_avg[i] / self.ta[self.tasks[i]] for i in range(len(self.s_avg))]
             s_avg_norm.sort()
             s_min_l = s_avg_norm[0:self.l]
+            performance = None #TODO
             self.r1 = 1 - self.s_avg[j] / self.c[j]
             self.r2 = 1 - np.average(np.clip(s_min_l, 0, 1))
-            self.r = self.lam * self.r1 + (1 - self.lam) * self.r2
-            self.p = self.ma.train_and_sample(state=[self.c / sum(self.c), self.p, one_hot(j, len(self.tasks))], reward=self.r)
-        self.amta.save_model()
+            self.reward = self.lambda_ * self.r1 + (1 - self.lambda_) * self.r2
+            self.p = self.ma.train_and_sample(game_input=[self.c / sum(self.c), self.p, one_hot(j, len(self.tasks))], reward=self.reward)
+        self.amta.save_model(performance)
         self.amta.exit_tbw()
 
     def train(self):

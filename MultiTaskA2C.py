@@ -237,11 +237,11 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     def setup_step_model(self):
         pass
 
-    def predict(self, game, observation, state=None, mask_dict=None, deterministic=False):
+    def predict(self, game, observation, state=None, mask=None, deterministic=False):
         if state is None:
             state = self.initial_state
-        if mask_dict is None:
-            mask_dict = None #TODO #[False for _ in range(self.n_envs)]
+        if mask is None:
+            mask = [False for _ in range(self.n_envs_per_task)]
 
         observation = np.array(observation)
         vectorized_env = utils._is_vectorized_observation(observation, self.observation_spaces[game])
@@ -254,14 +254,14 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             exit()
 
         observation = observation.reshape((-1,) + observation.shape)
-        actions, _, _ = self.step(game, observation, state, mask_dict, deterministic=deterministic)
+        actions, value, state, neglogp = self.step(game, observation, state, mask, deterministic=deterministic)
 
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
             actions = actions[0]
 
-        return actions
+        return actions, state
 
     @abstractmethod
     def save(self, save_path, name):
@@ -552,6 +552,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.train_step, writer)
             n_seconds = time.time() - t_start
             fps = int(self.n_batch / n_seconds)
+            train_step_per_sec = int(1 / n_seconds)
 
             tmp_ep_scores = self.episode_reward.get_reward(game, true_rewards.reshape((self.n_envs_per_task, self.n_steps)),
                                                            masks.reshape((self.n_envs_per_task, self.n_steps)), self.train_step)
@@ -567,10 +568,10 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.num_timesteps += self.n_batch
             ep_train_step += 1
 
-            if self.verbose >= 1 and (self.train_step % log_interval == 0):
+            if self.verbose >= 1 and ((self.train_step % log_interval == 0) or (mask == [True]*self.n_envs_per_task)):
                 explained_var = explained_variance(values, rewards)
                 logger.record_tabular("training_updates", self.train_step)
-                # logger.record_tabular("total_timesteps", self.num_timesteps)
+                logger.record_tabular("train_step_per_sec", train_step_per_sec)
                 logger.record_tabular("fps", fps)
                 logger.record_tabular("policy_loss", float(policy_loss))
                 logger.record_tabular("value_loss", float(value_loss))

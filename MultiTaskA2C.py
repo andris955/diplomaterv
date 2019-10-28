@@ -600,10 +600,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             # "observation_spaces": self.observation_spaces,
             "action_space_dict": self.action_space_dict,
             "n_envs_per_task": self.n_envs_per_task,
-            # "_vectorize_action": self._vectorize_action,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
-            # "transfer_id": self.transfer_id,
             "total_train_steps": self.total_train_steps,
             "train_step": self.train_step,
         }
@@ -620,14 +618,13 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "alpha": self.alpha,
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
-            # "verbose": self.verbose,
             "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
             "action_spaces": {},
             "n_envs_per_task": self.n_envs_per_task,
-            # "_vectorize_action": self._vectorize_action,
-            # "transfer_id": self.transfer_id,
-            "max_training_step": global_config.MaxTrainSteps,
-            "train_step": self.train_step
+            "max_training_steps": global_config.max_train_steps,
+            "uniform_policy_steps": global_config.uniform_policy_steps,
+            "number_of_episodes_for_estimating": global_config.number_of_episodes_for_estimating,
+            "train_step": self.train_step,
         }
 
         for game, value in self.action_space_dict.items():

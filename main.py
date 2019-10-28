@@ -1,4 +1,4 @@
-from MultiTaskAlgorithm import MultiTaskLearning
+from MultiTaskLearning import MultiTaskLearning
 import global_config
 from MultiTaskAgent import MultiTaskAgent
 from utils import dir_check

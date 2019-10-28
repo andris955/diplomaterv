@@ -22,7 +22,7 @@ import utils
 import tf_utils
 import global_config
 
-from episode_reward import EpisodeRewardCalculator
+from EpisodeRewardCalculator import EpisodeRewardCalculator
 
 
 class BaseMultitaskRLModel(ABC):

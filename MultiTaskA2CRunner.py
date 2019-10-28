@@ -4,7 +4,7 @@ from stable_baselines.a2c.utils import discount_with_dones
 import gym
 
 
-class myA2CRunner(AbstractEnvRunner):
+class MultiTaskA2CRunner(AbstractEnvRunner):
     def __init__(self, env_name, env, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
@@ -14,7 +14,7 @@ class myA2CRunner(AbstractEnvRunner):
         :param n_steps: (int) The number of steps to run for each environment
         :param gamma: (float) Discount factor
         """
-        super(myA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
+        super(MultiTaskA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
         self.env_name = env_name
 

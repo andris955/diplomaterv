@@ -19,7 +19,7 @@ class MetaAgent:
         self.inputs.pop(0)
         self.rewards.append(reward)
         self.rewards.pop(0)
-        action, value, neglogp = self.meta_learner.policy_model.step(state=np.asarray(self.inputs))
+        action, value, neglogp = self.meta_learner.policy_model.step(state=np.asarray(self.inputs)) #TODO eloszlást kell hogy visszaadjon
         self.actions.append(action)
         self.actions.pop(0)
         self.values.append(value)

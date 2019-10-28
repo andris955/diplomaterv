@@ -1,11 +1,11 @@
 from MultiTaskA2C import MultitaskA2C
-from runner import myA2CRunner
+from MultiTaskA2CRunner import MultiTaskA2CRunner
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
 import global_config
 import datetime
 import os
-from logger import Logger
+from Logger import Logger
 from collections import namedtuple
 import time
 import numpy as np
@@ -83,8 +83,8 @@ class MultiTaskAgent:
     def __setup_runners(self):
         self.runners = {}
         for task in self.list_of_tasks:
-            self.runners[task] = myA2CRunner(task, self.sub_proc_environments[task],
-                                             self.model, n_steps=self.n_steps, gamma=0.99)
+            self.runners[task] = MultiTaskA2CRunner(task, self.sub_proc_environments[task],
+                                                    self.model, n_steps=self.n_steps, gamma=0.99)
 
     def train_for_one_episode(self, task, logging=True):
         runner = self.runners[task]

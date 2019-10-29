@@ -58,15 +58,17 @@ class MetaLstmPolicyActorCriticPolicy:
 
         # Outputs
         assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
-        self.action = self.proba_distribution.mode()
+        self.flat_param = self.proba_distribution.flatparam()
+        self.action = self.proba_distribution.sample()
         self.neglogp = self.proba_distribution.neglogp(self.action)
         self._value = self.value_fn[:, 0]
 
         self.initial_state = np.zeros((self.n_batch, self.input_length), dtype=np.float32)
 
     def step(self, input_state):
-        return self.sess.run([self.action, self._value, self.neglogp],
-                             {self.input_ph: input_state})
+        flat_param, action, value, neglogp = self.sess.run([self.flat_param, self.action, self._value, self.neglogp], {self.input_ph: input_state})
+        return flat_param, action, value, neglogp
 
     def value(self, input_state):
-        return self.sess.run(self._value, {self.input_ph: input_state})
+        value = self.sess.run(self._value, {self.input_ph: input_state})
+        return value

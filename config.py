@@ -54,13 +54,17 @@ tau = 1
 
 n_steps = 10
 
-logging_frequency = 10  # number of episodes
-
+stdout_logging_frequency_in_train_steps = 100
+file_logging_frequency_in_episodes = 10  # number of episodes
 verbose = 1
 
-tensorboard_log = "./data/tb_logs"
+meta_layers = (100, 100, "lstm")
+meta_lstm_units = 100
+meta_lambda = 0.5
 
-log_path = "./data/logs"
+tensorboard_log = "./data/tb_logs/"
+model_path = "./data/models/"
+log_path = "./data/logs/"
 
 if __name__ == '__main__':
     import gym

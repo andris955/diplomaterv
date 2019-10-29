@@ -2,8 +2,7 @@ from MultiTaskA2C import MultitaskA2C
 from MultiTaskA2CRunner import MultiTaskA2CRunner
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
-import global_config
-import datetime
+import config
 import os
 from Logger import Logger
 from collections import namedtuple
@@ -11,36 +10,29 @@ import time
 import numpy as np
 
 class MultiTaskAgent:
-    def __init__(self, algorithm, policy, list_of_tasks, n_steps, max_train_steps, n_cpus, transfer_id, tensorboard_logging):
-        self.algorithm = algorithm
+    def __init__(self, model_id, policy, list_of_tasks, n_steps, max_train_steps, n_cpus, tensorboard_logging, logging):
         self.list_of_tasks = list_of_tasks
         self.max_train_steps = max_train_steps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
         self.policy = policy
-        self.tb_log = tensorboard_logging
+        self.logging = logging
+        if tensorboard_logging:
+            self.tb_log = config.tensorboard_log
+        else:
+            self.tb_log = None
         self.start_time = time.time()
         self.n_steps = n_steps
 
-        now = str(datetime.datetime.now())[2:16]
-        now = now.replace(' ', '_')
-        now = now.replace(':', '_')
-        now = now.replace('-', '_')
-        self.initialize_time = now
+        self.model_id = model_id
+        self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) else False
 
-        self.transfer_id = None
-
-        if transfer_id is not None:
-            self.model_name = transfer_id
-            self.transfer_id = transfer_id
-        else:
-            self.model_name = self.algorithm + "_" + self.initialize_time
-
-        self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step relative_performance scores policy_loss value_loss")
-        self.logger = Logger(self.model_name, self.list_of_tasks)
+        if self.logging:
+            self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step relative_performance scores policy_loss value_loss")
+            self.logger = Logger(self.model_id, self.list_of_tasks)
 
         data = None
-        if transfer_id:
+        if self.transfer:
             data, elapsed_time = self.logger.init_train_data()
             self.start_time -= elapsed_time
 
@@ -70,13 +62,13 @@ class MultiTaskAgent:
             self.sub_proc_environments[task] = env
 
     def __setup_model(self):
-        if self.transfer_id is None:
+        if not self.transfer:
             self.model = MultitaskA2C(self.policy, self.sub_proc_environments, tensorboard_log=self.tb_log,
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=self.n_steps)
         else:
-            self.model, _ = MultitaskA2C.load(self.transfer_id, envs_to_set=self.sub_proc_environments, transfer=True)
+            self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.sub_proc_environments, transfer=True)
 
-        self.tbw = self.model._setup_multitask_learn(self.model_name, self.max_train_steps)
+        self.tbw = self.model._setup_multitask_learn(self.model_id, self.max_train_steps)
         if self.tbw is not None:
             self.writer = self.tbw.writer
 
@@ -86,19 +78,19 @@ class MultiTaskAgent:
             self.runners[task] = MultiTaskA2CRunner(task, self.sub_proc_environments[task],
                                                     self.model, n_steps=self.n_steps, gamma=0.99)
 
-    def train_for_one_episode(self, task, logging=True):
+    def train_for_one_episode(self, task):
         runner = self.runners[task]
         ep_scores, policy_loss, value_loss, train_steps = self.model.multi_task_learn_for_one_episode(task, runner, self.writer)
-        if logging:
+        if self.logging:
             self.episode_learn += 1
             self.train_step[task] += train_steps
             log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time),
                                       total_train_step=self.model.train_step, train_step=self.train_step[task],
-                                      relative_performance=np.mean(ep_scores) / global_config.target_performances[task], scores=np.mean(ep_scores),
+                                      relative_performance=np.mean(ep_scores) / config.target_performances[task], scores=np.mean(ep_scores),
                                       policy_loss=policy_loss, value_loss=value_loss)
             self.logger.log(task, log_value)
             self.data_available[self.list_of_tasks.index(task)] = True
-            if self.episode_learn % global_config.logging_frequency == 0 and all(self.data_available) is True:
+            if self.episode_learn % config.file_logging_frequency_in_episodes == 0 and all(self.data_available) is True:
                 self.logger.dump()
 
         return ep_scores, train_steps
@@ -127,11 +119,11 @@ class MultiTaskAgent:
 
     def save_model(self, performance):
         try:
-            base_path = "./data/models/" + self.model_name
-            name = "{:08}-{:1.2f}".format(self.model.train_step, performance)
+            base_path = os.path.join(config.model_path, self.model_id)
+            id = "{:08}-{:1.2f}".format(self.model.train_step, performance)
             if not os.path.exists(base_path):
                 os.mkdir(base_path)
-            self.model.save(base_path, name)
+            self.model.save(base_path, id)
         except:
             print("Error saving the model")
 

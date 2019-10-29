@@ -1,13 +1,13 @@
 import os
 import pandas as pd
-import global_config
+import config
 
 
 class Logger:
     def __init__(self, id, listofgames):
         self.id = id
         self.listofgames = listofgames
-        self.folder_path = os.path.join(global_config.log_path, self.id)
+        self.folder_path = os.path.join(config.log_path, self.id)
         if not os.path.exists(self.folder_path):
             os.mkdir(self.folder_path)
         self.fields = None

@@ -3,7 +3,6 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
-import cloudpickle
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy, MultiTaskLSTMA2CPolicy
 
@@ -17,10 +16,9 @@ from stable_baselines.common import explained_variance, SetVerbosity
 from stable_baselines.a2c.utils import mse
 from TensorboardWriter import TensorboardWriter
 
-import json
 import utils
 import tf_utils
-import global_config
+import config
 
 from EpisodeRewardCalculator import EpisodeRewardCalculator
 
@@ -39,11 +37,10 @@ class BaseMultitaskRLModel(ABC):
         self.policy = utils.get_policy_from_string(self.policy_name)
         self.env_dict = env_dict
         self.tasks = [key for key in self.env_dict.keys()] if self.env_dict is not None else None
-        self.verbose = global_config.verbose
+        self.verbose = config.verbose
         self.observation_spaces = []
         self.action_space_dict = {}
         self.n_envs_per_task = None
-        # self._vectorize_action = False
         self.num_timesteps = 0
 
         if env_dict is not None:
@@ -146,7 +143,7 @@ class BaseMultitaskRLModel(ABC):
         pass
 
     @abstractmethod
-    def save(self, save_path, name):
+    def save(self, save_path, id):
         """
         Save the current parameters to file
 
@@ -160,40 +157,6 @@ class BaseMultitaskRLModel(ABC):
     def load(cls, model_id, envs_to_set=None, transfer=False):
         raise NotImplementedError()
 
-    @staticmethod
-    def _save_to_file(save_path, name, json_params=None, weights=None, params=None):
-        if isinstance(save_path, str):
-            _, ext = os.path.splitext(save_path)
-            if ext == "":
-                model_path = os.path.join(save_path, 'model_' + name + '.pkl')
-                param_path = os.path.join(save_path, 'params.json')
-
-                with open(model_path, "wb") as file_:
-                    cloudpickle.dump((weights, params), file_)
-
-                # if not os.path.exists(param_path):
-                with open(param_path, "w") as file_:
-                    json.dump(json_params, file_)
-            else:
-                raise ValueError("Error save_path must be a directory path")
-
-        else:
-            raise ValueError("Error: save_path must be a string")
-
-    @staticmethod
-    def _load_from_file(load_path):
-        if isinstance(load_path, str):
-            model_path = os.path.join(load_path, 'model.pkl')
-            if os.path.exists(model_path):
-                with open(model_path, "rb") as file:
-                    weights, params = cloudpickle.load(file)
-            else:
-                raise ValueError("Error: No such file {}".format(model_path))
-        else:
-            raise ValueError("Error: load_path must be a string")
-
-        return weights, params
-
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -206,7 +169,6 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     :param _init_steup_model: (Bool) A loadhoz kell!
     :param env_dict: (Dictionary of Gym environments) The environment to learn from
                 (if registered in Gym, can be str. Can be None for loading trained models)
-    :param policy_base: (BasePolicy) the base policy used by this method (default=ActorCriticPolicy)
     """
 
     def __init__(self, policy, env_dict, _init_setup_model):
@@ -216,7 +178,6 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         self.initial_state = None
         self.step = None
         self.trainable_variables = None
-        # self.transfer_id = []
 
     @abstractmethod
     def setup_train_model(self, transfer=False):
@@ -258,8 +219,8 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
     @classmethod
     def load(cls, model_id, envs_to_set=None, transfer=False):
-        load_path = os.path.join('./data/models', model_id)
-        weights, params = cls._load_from_file(load_path)
+        load_path = os.path.join(config.model_path, model_id)
+        weights, params = utils._load_from_file(load_path, "multitask")
 
         model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
@@ -514,7 +475,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         return policy_loss, value_loss, policy_entropy
 
-    def multi_task_learn_for_one_episode(self, game, runner, writer, log_interval=100):
+    def multi_task_learn_for_one_episode(self, game, runner, writer):
         """
         Trains until game over.
 
@@ -534,9 +495,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         while mask != [True]*self.n_envs_per_task:
             t_start = time.time()
-            # true_reward is the reward without discount
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.train_step += 1
+            # true_reward is the reward without discount
             obs, states, rewards, masks, actions, values, true_rewards, dones = runner.run()
             policy_loss, value_loss, policy_entropy = self._train_step(game, obs, states, rewards, masks, actions, values, self.train_step, writer)
             n_seconds = time.time() - t_start
@@ -557,7 +518,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.num_timesteps += self.n_batch
             ep_train_step += 1
 
-            if self.verbose >= 1 and ((self.train_step % log_interval == 0) or (mask == [True]*self.n_envs_per_task)):
+            if self.verbose >= 1 and ((self.train_step % config.stdout_logging_frequency_in_train_steps == 0) or (mask == [True] * self.n_envs_per_task)):
                 explained_var = explained_variance(values, rewards)
                 logger.record_tabular("training_updates", self.train_step)
                 logger.record_tabular("train_step_per_sec", train_step_per_sec)
@@ -571,7 +532,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         return ep_scores, policy_loss, value_loss, ep_train_step
 
-    def save(self, save_path, name):
+    def save(self, save_path, id):
         params = {
             "tasks": self.tasks,
             "gamma": self.gamma,
@@ -610,9 +571,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
             "action_spaces": {},
             "n_envs_per_task": self.n_envs_per_task,
-            "max_training_steps": global_config.max_train_steps,
-            "uniform_policy_steps": global_config.uniform_policy_steps,
-            "number_of_episodes_for_estimating": global_config.number_of_episodes_for_estimating,
+            "max_training_steps": config.max_train_steps,
+            "uniform_policy_steps": config.uniform_policy_steps,
+            "number_of_episodes_for_estimating": config.number_of_episodes_for_estimating,
             "train_step": self.train_step,
         }
 
@@ -621,4 +582,4 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         weights = self.sess.run(self.trainable_variables)
 
-        self._save_to_file(save_path, name, json_params=json_params, weights=weights, params=params)
+        utils._save_to_file(save_path, id, 'multitask', json_params=json_params, weights=weights, params=params)

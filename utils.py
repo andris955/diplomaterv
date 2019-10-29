@@ -2,6 +2,8 @@ import numpy as np
 import os
 import json
 import gym
+import cloudpickle
+
 from MultiTaskPolicy import MultiTaskFeedForwardA2CPolicy, MultiTaskLSTMA2CPolicy
 
 
@@ -63,6 +65,7 @@ def _is_vectorized_observation(observation, observation_space):
         raise ValueError("Error: Cannot determine if the observation is vectorized with the space type {}."
                          .format(observation_space))
 
+
 def one_hot(k, n):
     """
     :param k: Index of the 1.
@@ -72,12 +75,6 @@ def one_hot(k, n):
     v = np.zeros(n)
     v[k] = 1
     return v
-
-
-def read_params(transfer_id):
-    with open(os.path.join(os.path.join("./data/models/", transfer_id), "params.json"), "r") as file:
-        params = json.load(file)
-    return params
 
 
 def constant(_):
@@ -152,17 +149,6 @@ SCHEDULES = {
 }
 
 
-def softmax(x_input):
-    """
-    An implementation of softmax.
-
-    :param x_input: (numpy float) input vector
-    :return: (numpy float) output vector
-    """
-    x_exp = np.exp(x_input)
-    return x_exp / x_exp.sum(axis=0)
-
-
 class Scheduler(object):
     def __init__(self, initial_value, n_values, schedule, init_step=None):
         """
@@ -200,6 +186,63 @@ class Scheduler(object):
         return self.initial_value * self.schedule(steps / self.nvalues)
 
 
+def _save_to_file(save_path, id, model, json_params=None, weights=None, params=None):
+    if model != "multitask" or model != "meta":
+        raise ValueError("model must be either str(multitask) or str(meta)")
+    if isinstance(save_path, str):
+        _, ext = os.path.splitext(save_path)
+        if ext == "":
+            model_path = os.path.join(save_path, model + '_model-' + id + '.pkl')
+            param_path = os.path.join(save_path, model + '_params' + '.json')
+
+            with open(model_path, "wb") as file_:
+                cloudpickle.dump((weights, params), file_)
+
+            # if not os.path.exists(param_path):
+            with open(param_path, "w") as file_:
+                json.dump(json_params, file_)
+        else:
+            raise ValueError("Error save_path must be a directory path")
+
+    else:
+        raise ValueError("Error: save_path must be a string")
+
+
+def _load_from_file(load_path, model):
+    if model != "multitask" or model != "meta":
+        raise ValueError("model must be either str(multitask) or str(meta)")
+    if isinstance(load_path, str):
+        model_path = os.path.join(load_path, model + '_model.pkl')
+        if os.path.exists(model_path):
+            with open(model_path, "rb") as file:
+                weights, params = cloudpickle.load(file)
+        else:
+            raise ValueError("Error: No such file {}".format(model_path))
+    else:
+        raise ValueError("Error: load_path must be a string")
+
+    return weights, params
+
+
+def read_params(transfer_id, model):
+    if model != "multitask" or model != "meta":
+        raise ValueError("model must be either str(multitask) or str(meta)")
+    with open(os.path.join(os.path.join("./data/models/", transfer_id), model + '_params.json'), "r") as file:
+        params = json.load(file)
+    return params
+
+
+def softmax(x_input):
+    """
+    An implementation of softmax.
+
+    :param x_input: (numpy float) input vector
+    :return: (numpy float) output vector
+    """
+    x_exp = np.exp(x_input)
+    return x_exp / x_exp.sum(axis=0)
+
+
 def dir_check():
     if not os.path.exists('./data'):
         os.mkdir('./data')
@@ -210,6 +253,7 @@ def dir_check():
     if not os.path.exists('./data/tb_logs'):
         os.mkdir('./data/tb_logs')
     return
+
 
 if __name__ == '__main__':
     dir_check()

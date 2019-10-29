@@ -4,6 +4,7 @@ from utils import one_hot, read_params
 from stable_baselines.common import SetVerbosity
 from MultiTaskAgent import MultiTaskAgent
 from MetaAgent import MetaAgent
+import utils
 
 
 class MultiTaskLearning:
@@ -47,15 +48,13 @@ class MultiTaskLearning:
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.a = []  # Average scores for every task
         self.m = []
-        self.p = []  # Probability of training on an episode of task Ti next.
+        self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
         self.performance = np.zeros(len(self.tasks))
         self.tau = global_config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
 
         for _ in range(len(self.tasks)):
-            self.p.append(1 / len(self.tasks))
             self.a.append(0.0)
-            self.m.append(0.000000001)
-        for i in range(len(self.tasks)):
+            self.m.append(1.0)
             self.s.append([0.0 for _ in range(self.n)])
 
     def __A5C_train(self):
@@ -63,13 +62,12 @@ class MultiTaskLearning:
             episode_learn = 0
             performance = 0
             while self.amta.model.train_step < self.max_train_steps:
+                for j in range(len(self.tasks)):
+                    self.a[j] = sum(self.s[j])/self.n
+                    self.m[j] = (self.ta[self.tasks[j]] - self.a[j]) / (self.ta[self.tasks[j]] * self.tau) # minél kisebb annál jobban teljesít az ágens az adott gamen
+                    self.performance[j] = min((self.a[j]) / (self.ta[self.tasks[j]]), 1)
                 if self.amta.model.train_step > self.uniform_policy_steps:
-                    for j in range(len(self.tasks)):
-                        self.a[j] = sum(self.s[j])/self.n
-                        self.m[j] = (self.ta[self.tasks[j]] - self.a[j]) / (self.ta[self.tasks[j]] * self.tau) # minél kisebb annál jobban teljesít az ágens az adott gamen
-                        self.performance[j] = np.min((self.a[j]) / (self.ta[self.tasks[j]]), 1)
-                    for j in range(len(self.tasks)):
-                        self.p[j] = np.exp(self.m[j]) / (sum(np.exp(self.m)))
+                    self.p = utils.softmax(np.asarray(self.m))
                 if episode_learn % global_config.logging_frequency == 0:
                     performance = np.mean(self.performance)  # qam
                     self.amta.save_model(performance)
@@ -94,11 +92,10 @@ class MultiTaskLearning:
         assert isinstance(meta_learning_agent, MetaAgent)
         self.ma = meta_learning_agent # Meta Learning MultiTaskAgent.
         self.lambda_ = lambda_ # Lambda weighting.
+
         for _ in range(len(self.tasks)):
             self.p.append(1 / len(self.tasks))
-        for i in range(len(self.tasks)):
             self.s.append([0.0 for _ in range(self.n)])
-        for i in range(len(self.tasks)):
             self.s_avg.append(0.0)
 
     # TODO megcsinálni

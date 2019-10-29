@@ -194,17 +194,6 @@ class BaseMultitaskRLModel(ABC):
 
         return weights, params
 
-    @staticmethod
-    def _softmax(x_input):
-        """
-        An implementation of softmax.
-
-        :param x_input: (numpy float) input vector
-        :return: (numpy float) output vector
-        """
-        x_exp = np.exp(x_input.T - np.max(x_input.T, axis=0))
-        return (x_exp / x_exp.sum(axis=0)).T
-
 
 # --------------------------------------------------------------------------------------------------------------------------------------------------
 

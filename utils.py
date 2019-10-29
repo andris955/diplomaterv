@@ -152,6 +152,17 @@ SCHEDULES = {
 }
 
 
+def softmax(x_input):
+    """
+    An implementation of softmax.
+
+    :param x_input: (numpy float) input vector
+    :return: (numpy float) output vector
+    """
+    x_exp = np.exp(x_input)
+    return x_exp / x_exp.sum(axis=0)
+
+
 class Scheduler(object):
     def __init__(self, initial_value, n_values, schedule, init_step=None):
         """

@@ -48,8 +48,8 @@ class MultiTaskLearning:
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.max_train_steps,
                                    self.n_cpus, tensorboard_logging, self.logging)
 
-        meta_n_batch = 5 #TODO ennek utána nézni#self.n_steps*self.n_cpus
-        meta_decider = MetaAgent(self.model_id, self.max_train_steps, meta_n_batch, 3*len(self.tasks), len(self.tasks))
+        meta_n_steps = 5 #TODO ennek utána nézni, valamint a n_stepsnek a runnerben és a multitaska2cben tanitásnál és predictnél
+        meta_decider = MetaAgent(self.model_id, self.max_train_steps, meta_n_steps, 3*len(self.tasks), len(self.tasks))
 
         self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.

@@ -33,7 +33,7 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, total_train_steps, input_length, output_length, n_batch, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
+    def __init__(self, total_train_steps, input_length, output_length, n_steps, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmPolicyActorCriticPolicy
@@ -41,7 +41,7 @@ class MetaA2CModel:
         self.input_length = input_length
         self.output_length = output_length
         self.num_train_steps = 0
-        self.n_batch = n_batch
+        self.n_steps = n_steps
         self.total_train_steps = total_train_steps
 
         self.gamma = gamma
@@ -97,14 +97,14 @@ class MetaA2CModel:
             self.sess = tf_utils.make_session(graph=self.graph)
 
             # azért nincs step model mert ugyanaz a lépés (n_batch) így felesleges.
-            policy_model = self.policy(sess=self.sess, input_length=self.input_length, output_length=self.output_length, n_batch=self.n_batch,
+            policy_model = self.policy(sess=self.sess, input_length=self.input_length, output_length=self.output_length, n_steps=self.n_steps,
                                        layers=self.layers, lstm_units=self.lstm_units)
 
             with tf.variable_scope("loss", reuse=False):
-                self.actions_ph = policy_model.pdtype.sample_placeholder([None], name="action_ph")
-                self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")
-                self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
-                self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+                self.actions_ph = policy_model.pdtype.sample_placeholder([1], name="action_ph")
+                self.advs_ph = tf.placeholder(tf.float32, [1], name="advs_ph")
+                self.rewards_ph = tf.placeholder(tf.float32, [1], name="rewards_ph")
+                self.learning_rate_ph = tf.placeholder(tf.float32, [1], name="learning_rate_ph")
 
                 neglogpac = policy_model.proba_distribution.neglogp(self.actions_ph)
                 self.entropy = tf.reduce_mean(policy_model.proba_distribution.entropy())
@@ -148,9 +148,7 @@ class MetaA2CModel:
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
 
         policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-            [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map) # TODO itt kihal tensorflow.python.framework.errors_impl.InvalidArgumentError: Inputs to operation
-        # loss/gradients/AddN_3 of type AddN must have the same size and shape.  Input 0: [5,5] != input 1: [1,5]
-	 #[[node loss/gradients/AddN_3 (defined at /home/andris955/Documents/Dipterv/diplomaterv/MetaA2C.py:121) ]]
+            [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
 
         return policy_loss, value_loss, policy_entropy
 
@@ -175,7 +173,7 @@ class MetaA2CModel:
             "num_train_steps": self.num_train_steps,
             "input_length": self.input_length,
             "output_length": self.output_length,
-            "n_batch": self.n_batch,
+            "n_steps": self.n_steps,
             "total_train_steps": self.total_train_steps,
             "layers": self.layers,
             "lstm_units": self.lstm_units,
@@ -185,7 +183,7 @@ class MetaA2CModel:
             "input_length": self.input_length,
             "output_length": self.output_length,
             "state_shape": self.initial_state.shape,
-            "n_batch": self.n_batch,
+            "n_steps": self.n_steps,
             "total_train_steps": self.total_train_steps,
             "gamma": self.gamma,
             "vf_coef": self.vf_coef,
@@ -218,7 +216,7 @@ class MetaA2CModel:
             raise ValueError("The input and the output length must be the same as the model's that trying to load.")
 
         model = cls(total_train_steps=params["total_train_steps"], input_length=params["input_length"], output_length=params["output_length"],
-                    n_batch=params["n_batch"], _init_setup_model=False)
+                    n_steps=params["n_steps"], _init_setup_model=False)
         model.__dict__.update(params)
         model.setup_model()
 

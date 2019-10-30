@@ -230,8 +230,8 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
 
         with tf.variable_scope("shared_model", reuse=reuse):
             extracted_features = feature_extractor(self.processed_obs)
-            input_sequence = batch_to_seq(extracted_features, self.n_envs_per_task, n_steps)
-            masks = batch_to_seq(self.masks_ph, self.n_envs_per_task, n_steps)
+            input_sequence = batch_to_seq(extracted_features, self.n_envs_per_task, self.n_steps)
+            masks = batch_to_seq(self.masks_ph, self.n_envs_per_task, self.n_steps)
             rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)
             latent_vector = seq_to_batch(rnn_output)
 

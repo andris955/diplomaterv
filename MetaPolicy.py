@@ -8,11 +8,11 @@ from stable_baselines.a2c.utils import linear
 
 
 class MetaLstmPolicyActorCriticPolicy:
-    def __init__(self, sess, input_length, output_length, n_batch=5, layers=(128, 128, "lstm"), lstm_units=64):
+    def __init__(self, sess, input_length, output_length, n_steps, layers, lstm_units):
         self.input_length = input_length
         self.output_length = output_length
-        self.n_batch = n_batch
-        assert self.n_batch > 0, "n_batch must be a positive integer!"
+        self.n_steps = n_steps
+        assert self.n_steps > 0, "n_batch must be a positive integer!"
         self.layers = layers
         self.lstm_units = lstm_units
 
@@ -35,7 +35,7 @@ class MetaLstmPolicyActorCriticPolicy:
         x = None
 
         # Input
-        self.input_ph = tf.placeholder(shape=(self.n_batch, self.input_length), dtype=tf.float32, name="input_ph")
+        self.input_ph = tf.placeholder(shape=(self.n_steps, self.input_length), dtype=tf.float32, name="input_ph")
 
         # Building the shared part of the network
         for i, layer in enumerate(self.layers):
@@ -63,7 +63,7 @@ class MetaLstmPolicyActorCriticPolicy:
         self.neglogp = self.proba_distribution.neglogp(self.action)
         self._value = self.value_fn[:, 0]
 
-        self.initial_state = np.zeros((self.n_batch, self.input_length), dtype=np.float32)
+        self.initial_state = np.zeros((self.n_steps, self.input_length), dtype=np.float32)
 
     def step(self, input_state):
         flat_param, action, value, neglogp = self.sess.run([self.flat_param, self.action, self._value, self.neglogp], {self.input_ph: input_state})

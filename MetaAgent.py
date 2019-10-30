@@ -7,36 +7,27 @@ from stable_baselines import logger
 
 
 class MetaAgent:
-    def __init__(self, model_id, total_train_steps, n_batch, input_len, output_len):
+    def __init__(self, model_id, total_train_steps, n_steps, input_len, output_len):
         self.model_id = model_id
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) else False
         self.input_len = input_len
         self.output_len = output_len
-        self.n_batch = n_batch
+        self.n_steps = n_steps
         if not self.transfer:
-            self.meta_learner = MetaA2CModel(total_train_steps, input_len, output_len, n_batch)
+            self.meta_learner = MetaA2CModel(total_train_steps, input_len, output_len, n_steps)
         else:
             self.meta_learner = MetaA2CModel.load(total_train_steps, input_len, output_len)
 
-        self.inputs = [np.zeros(self.input_len)] * self.n_batch
-        self.actions = [0] * self.n_batch
-        self.rewards = [0.0] * self.n_batch
-        self.values = [0.0] * self.n_batch
+        self.inputs = [np.zeros(self.input_len)] * self.n_steps
         self.train_step = 0
 
     def train_and_sample(self, game_input, reward):
         self.inputs.append(game_input)
         self.inputs.pop(0)
-        self.rewards.append(reward)
-        self.rewards.pop(0)
         flat_param, action, value, neglogp = self.meta_learner.step(input_state=np.asarray(self.inputs))
         self.train_step += 1
-        self.actions.append(action[0])
-        self.actions.pop(0)
-        self.values.append(value[0])
-        self.values.pop(0)
-        policy_loss, value_loss, policy_entropy = self.meta_learner.train_step(inputs=np.asarray(self.inputs), rewards=np.asarray(self.rewards),
-                                                                               actions=np.asarray(self.actions), values=np.asarray(self.values))
+        policy_loss, value_loss, policy_entropy = self.meta_learner.train_step(inputs=np.asarray(self.inputs), rewards=np.asarray(reward),
+                                                                               actions=action, values=value)
 
         print("---------------------------{}---------------------------".format("Meta agent"))
         if self.train_step % (config.stdout_logging_frequency_in_train_steps // 10) == 0:

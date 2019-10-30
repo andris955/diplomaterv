@@ -36,6 +36,7 @@ class MultiTaskLearning:
 
         self.verbose = verbose
         self.logging = logging
+        self.best_performance = 0.1
 
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
@@ -82,10 +83,12 @@ class MultiTaskLearning:
                     self.performance[j] = min((self.a[j]) / (self.ta[self.tasks[j]]), 1)
                 if self.amta.model.train_step > self.uniform_policy_steps:
                     self.p = utils.softmax(np.asarray(self.m))
-                if episode_learn % config.file_logging_frequency_in_episodes == 0 and episode_learn > 0:
-                    performance = np.mean(self.performance)  # qam
+                performance = np.mean(self.performance)  # qam
+                if (episode_learn % config.file_logging_frequency_in_episodes == 0 or performance > self.best_performance) and episode_learn > 0:
                     self.amta.save_model(performance)
                     self.amta.flush_tbw()
+                if performance > self.best_performance:
+                    self.best_performance = performance
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
                 episode_learn += 1

@@ -55,7 +55,7 @@ tau = 1
 n_steps = 10
 
 stdout_logging_frequency_in_train_steps = 100
-file_logging_frequency_in_episodes = 10  # number of episodes
+file_logging_frequency_in_episodes = 15  # number of episodes
 verbose = 1
 
 meta_layers = (100, 100, "lstm")

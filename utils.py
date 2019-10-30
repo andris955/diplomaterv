@@ -187,12 +187,15 @@ class Scheduler(object):
 
 
 def _save_to_file(save_path, id, model, json_params=None, weights=None, params=None):
-    if model != "multitask" or model != "meta":
+    if model != "multitask" and model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
     if isinstance(save_path, str):
         _, ext = os.path.splitext(save_path)
         if ext == "":
-            model_path = os.path.join(save_path, model + '_model-' + id + '.pkl')
+            if model == "multitask":
+                model_path = os.path.join(save_path, model + '_model-' + id + '.pkl')
+            else:
+                model_path = os.path.join(save_path, model + '_model.pkl')
             param_path = os.path.join(save_path, model + '_params' + '.json')
 
             with open(model_path, "wb") as file_:

@@ -125,7 +125,7 @@ class MultiTaskAgent:
                 os.mkdir(base_path)
             self.model.save(base_path, id)
         except:
-            print("Error saving the model")
+            print("Error saving the Multi-task model")
 
     def exit_tbw(self):
         if self.tbw is not None:

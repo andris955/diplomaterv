@@ -66,8 +66,8 @@ class MetaLstmPolicyActorCriticPolicy:
         self.initial_state = np.zeros((self.n_steps, self.input_length), dtype=np.float32)
 
     def step(self, input_state):
-        flat_param, action, value, neglogp = self.sess.run([self.flat_param, self.action, self._value, self.neglogp], {self.input_ph: input_state})
-        return flat_param, action, value, neglogp
+        flat_param, value, neglogp = self.sess.run([self.flat_param, self._value, self.neglogp], {self.input_ph: input_state})
+        return flat_param, value, neglogp
 
     def value(self, input_state):
         value = self.sess.run(self._value, {self.input_ph: input_state})

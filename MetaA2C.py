@@ -104,7 +104,7 @@ class MetaA2CModel:
                 self.actions_ph = policy_model.pdtype.sample_placeholder([1], name="action_ph")
                 self.advs_ph = tf.placeholder(tf.float32, [1], name="advs_ph")
                 self.rewards_ph = tf.placeholder(tf.float32, [1], name="rewards_ph")
-                self.learning_rate_ph = tf.placeholder(tf.float32, [1], name="learning_rate_ph")
+                self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
                 neglogpac = policy_model.proba_distribution.neglogp(self.actions_ph)
                 self.entropy = tf.reduce_mean(policy_model.proba_distribution.entropy())

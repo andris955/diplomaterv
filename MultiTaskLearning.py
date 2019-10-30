@@ -48,7 +48,7 @@ class MultiTaskLearning:
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.max_train_steps,
                                    self.n_cpus, tensorboard_logging, self.logging)
 
-        meta_n_steps = 5 #TODO ennek utána nézni, valamint a n_stepsnek a runnerben és a multitaska2cben tanitásnál és predictnél
+        meta_n_steps = 5 #TODO ennek utána nézni, valamint a n_stepsnek a runnerben és a multitaska2cben és policyben tanitásnál és predictnél
         meta_decider = MetaAgent(self.model_id, self.max_train_steps, meta_n_steps, 3*len(self.tasks), len(self.tasks))
 
         self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
@@ -98,9 +98,6 @@ class MultiTaskLearning:
     def __EA4C_init(self, meta_decider, lambda_):
         self.l = len(self.tasks) // 2
         self.training_episodes = np.zeros(len(self.tasks))  # Count of the number of training episodes of task Ti.
-        self.r1 = 0
-        self.r2 = 0  # First & second component of the reward for meta-learner, defined in lines 93-94
-        self.reward = 0  # Reward for meta-learner
         assert isinstance(meta_decider, MetaAgent)
         self.ma = meta_decider  # Meta Learning MultiTaskAgent.
         self.lambda_ = lambda_  # Lambda weighting.
@@ -109,8 +106,9 @@ class MultiTaskLearning:
         with SetVerbosity(self.verbose):
             episode_learn = 0
             performance = 0
+            action = j = 0
+            value = np.array([0])
             while self.amta.model.train_step < self.max_train_steps:
-                j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
                 self.training_episodes[j] = self.training_episodes[j] + 1
                 episode_learn += 1
@@ -128,11 +126,14 @@ class MultiTaskLearning:
                 s_avg_norm = [self.a[i] / self.ta[self.tasks[i]] for i in range(len(self.a))]
                 s_avg_norm.sort()
                 s_min_l = s_avg_norm[0:self.l]
-                self.r1 = 1 - self.a[j] / self.training_episodes[j]
-                self.r2 = 1 - np.mean(np.clip(s_min_l, 0, 1))
-                self.reward = self.lambda_ * self.r1 + (1 - self.lambda_) * self.r2
-                self.p = self.ma.train_and_sample(game_input=np.concatenate([self.training_episodes / np.sum(self.training_episodes),
-                                                              self.p, one_hot(j, len(self.tasks))]), reward=self.reward) # Input 3*len(tasks)
+                r1 = 1 - self.a[j] / self.training_episodes[j]
+                r2 = 1 - np.mean(np.clip(s_min_l, 0, 1))
+                reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
+                self.ma.train(action, value, reward)
+                self.p, value, neglogp = self.ma.sample(game_input=np.concatenate([self.training_episodes / np.sum(self.training_episodes),
+                                                              self.p, one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
+                action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+
             self.amta.save_model(performance)
             self.ma.save_model(self.amta.model.train_step)
             self.amta.exit_tbw()

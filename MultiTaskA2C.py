@@ -448,7 +448,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         if writer is not None and (self.num_timesteps % 1000 == 0):
             tf_utils.tensorboard_logger(game, rewards, advs, writer, self.num_timesteps, obs=None)
 
-        td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
+        td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs, #TODO belenézni a shapekbe
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
 
         if states is not None:

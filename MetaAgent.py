@@ -21,21 +21,25 @@ class MetaAgent:
         self.inputs = [np.zeros(self.input_len)] * self.n_steps
         self.train_step = 0
 
-    def train_and_sample(self, game_input, reward):
+    def sample(self, game_input):
         self.inputs.append(game_input)
         self.inputs.pop(0)
-        flat_param, action, value, neglogp = self.meta_learner.step(input_state=np.asarray(self.inputs))
-        self.train_step += 1
-        policy_loss, value_loss, policy_entropy = self.meta_learner.train_step(inputs=np.asarray(self.inputs), rewards=np.asarray(reward),
-                                                                               actions=action, values=value)
+        flat_param, value, neglogp = self.meta_learner.step(input_state=np.asarray(self.inputs))
+        prob_dist = utils.softmax(flat_param[0, :])
+        return prob_dist, value, neglogp
 
-        print("---------------------------{}---------------------------".format("Meta agent"))
+    def train(self, action, value, reward):
+        rewards = np.asarray([reward])
+        actions = np.asarray([action])
+        policy_loss, value_loss, policy_entropy = self.meta_learner.train_step(inputs=np.asarray(self.inputs), rewards=rewards,
+                                                                               actions=actions, values=value)
+        self.train_step += 1
+
         if self.train_step % (config.stdout_logging_frequency_in_train_steps // 10) == 0:
+            print("---------------------------{}---------------------------".format("Meta agent"))
             logger.record_tabular("value_loss", float(value_loss))
             logger.record_tabular("policy_loss", float(policy_loss))
             logger.dump_tabular()
-
-        return utils.softmax(flat_param)
 
     def save_model(self, train_step):
         try:

@@ -9,7 +9,7 @@ from stable_baselines.a2c.utils import mse
 from stable_baselines.common import set_global_seeds
 
 import tf_utils
-from MetaPolicy import MetaLstmPolicyActorCriticPolicy
+from MetaPolicy import MetaLstmActorCriticPolicy
 from utils import Scheduler
 
 
@@ -36,7 +36,7 @@ class MetaA2CModel:
     def __init__(self, total_train_steps, input_length, output_length, n_steps, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
-        self.policy = MetaLstmPolicyActorCriticPolicy
+        self.policy = MetaLstmActorCriticPolicy
         self.verbose = verbose
         self.input_length = input_length
         self.output_length = output_length
@@ -89,8 +89,8 @@ class MetaA2CModel:
         Create all the functions and tensorflow graphs necessary to train the model
         """
 
-        assert issubclass(self.policy, MetaLstmPolicyActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                         "instance of MetaLstmPolicyActorCriticPolicy."
+        assert issubclass(self.policy, MetaLstmActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
+                                                                         "instance of MetaLstmActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():

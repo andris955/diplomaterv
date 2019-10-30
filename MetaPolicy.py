@@ -7,7 +7,7 @@ from stable_baselines.common.distributions import CategoricalProbabilityDistribu
 from stable_baselines.a2c.utils import linear
 
 
-class MetaLstmPolicyActorCriticPolicy:
+class MetaLstmActorCriticPolicy:
     def __init__(self, sess, input_length, output_length, n_steps, layers, lstm_units):
         self.input_length = input_length
         self.output_length = output_length

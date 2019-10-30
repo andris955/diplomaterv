@@ -37,7 +37,7 @@ class MultiTaskLearning:
         self.verbose = verbose
         self.logging = logging
         self.best_avg_performance = 0.1
-        self.best_harmonic_performance = 0.0
+        self.best_harmonic_performance = 0.05
 
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
@@ -85,8 +85,8 @@ class MultiTaskLearning:
                     self.performance[j] = min((self.a[j]) / (self.ta[self.tasks[j]]), 1)
                 if self.amta.model.train_step > self.uniform_policy_steps:
                     self.p = utils.softmax(np.asarray(self.m))
-                avg_performance = np.mean(self.performance)  # qam
-                harmonic_performance = hmean(self.performance)
+                avg_performance = np.around(np.mean(self.performance), 2)  # qam
+                harmonic_performance = np.around(hmean(self.performance), 2)
                 if (episode_learn % config.file_logging_frequency_in_episodes == 0 or
                     (avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance)) \
                         and episode_learn > 0:
@@ -129,8 +129,8 @@ class MultiTaskLearning:
                 for i in range(len(self.a)):
                     self.a[i] = sum(self.s[i]) / len(self.s[i])
                     self.performance[i] = min((self.a[i]) / (self.ta[self.tasks[i]]), 1)
-                avg_performance = np.mean(self.performance)  # qam
-                harmonic_performance = hmean(self.performance)
+                avg_performance = np.around(np.mean(self.performance), 2)  # qam
+                harmonic_performance = np.around(hmean(self.performance), 2)
                 if (episode_learn % config.file_logging_frequency_in_episodes == 0 or
                     (avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance)) \
                         and episode_learn > 0:

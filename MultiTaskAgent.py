@@ -1,5 +1,5 @@
 from MultiTaskA2C import MultitaskA2C
-from MultiTaskA2CRunner import MultiTaskA2CRunner
+from MultiTaskRunner import MultiTaskA2CRunner
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
 import config

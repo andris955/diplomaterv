@@ -58,7 +58,7 @@ class MultiTaskLearning:
         self.a = []  # Average scores for every task
 
         for _ in range(len(self.tasks)):
-            self.s.append([0.0])
+            self.s.append([1.0]) # Harmonic performance miatt nem lehet 0.0
             self.a.append(0.0)
 
         if self.algorithm == "A5C":

@@ -117,10 +117,10 @@ class MultiTaskAgent:
                 if display is True:
                     env.render()
 
-    def save_model(self, performance):
+    def save_model(self, avg_performance, harmonic_performance):
         try:
             base_path = os.path.join(config.model_path, self.model_id)
-            id = "{:08}-{:1.2f}".format(self.model.train_step, performance)
+            id = "{:08}-{:1.2f}-{:1.2f}".format(self.model.train_step, avg_performance, harmonic_performance)
             if not os.path.exists(base_path):
                 os.mkdir(base_path)
             self.model.save(base_path, id)

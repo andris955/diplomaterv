@@ -6,7 +6,7 @@ from MultiTaskAgent import MultiTaskAgent
 from MetaAgent import MetaAgent
 import utils
 import datetime
-
+from scipy.stats import hmean
 
 class MultiTaskLearning:
     def __init__(self, set_of_tasks, algorithm, policy, target_performances, n_cpus,
@@ -36,7 +36,8 @@ class MultiTaskLearning:
 
         self.verbose = verbose
         self.logging = logging
-        self.best_performance = 0.1
+        self.best_avg_performance = 0.1
+        self.best_harmonic_performance = 0.0
 
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
@@ -75,7 +76,8 @@ class MultiTaskLearning:
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
             episode_learn = 0
-            performance = 0
+            avg_performance = 0
+            harmonic_performance = 0
             while self.amta.model.train_step < self.max_train_steps:
                 for j in range(len(self.tasks)):
                     self.a[j] = sum(self.s[j])/len(self.s[j])
@@ -83,19 +85,24 @@ class MultiTaskLearning:
                     self.performance[j] = min((self.a[j]) / (self.ta[self.tasks[j]]), 1)
                 if self.amta.model.train_step > self.uniform_policy_steps:
                     self.p = utils.softmax(np.asarray(self.m))
-                performance = np.mean(self.performance)  # qam
-                if (episode_learn % config.file_logging_frequency_in_episodes == 0 or performance > self.best_performance) and episode_learn > 0:
-                    self.amta.save_model(performance)
+                avg_performance = np.mean(self.performance)  # qam
+                harmonic_performance = hmean(self.performance)
+                if (episode_learn % config.file_logging_frequency_in_episodes == 0 or
+                    (avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance)) \
+                        and episode_learn > 0:
+                    self.amta.save_model(avg_performance, harmonic_performance)
                     self.amta.flush_tbw()
-                if performance > self.best_performance:
-                    self.best_performance = performance
+                if avg_performance > self.best_avg_performance:
+                    self.best_avg_performance = avg_performance
+                if harmonic_performance > self.best_harmonic_performance:
+                    self.best_harmonic_performance = harmonic_performance
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
                 episode_learn += 1
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
-            self.amta.save_model(performance)
+            self.amta.save_model(avg_performance, harmonic_performance)
             self.amta.exit_tbw()
 
     def __EA4C_init(self, meta_decider, lambda_):
@@ -108,9 +115,10 @@ class MultiTaskLearning:
     def __EA4C_train(self):
         with SetVerbosity(self.verbose):
             episode_learn = 0
-            performance = 0
             action = j = 0
             value = np.array([0])
+            avg_performance = 0
+            harmonic_performance = 0
             while self.amta.model.train_step < self.max_train_steps:
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
                 self.training_episodes[j] = self.training_episodes[j] + 1
@@ -121,11 +129,18 @@ class MultiTaskLearning:
                 for i in range(len(self.a)):
                     self.a[i] = sum(self.s[i]) / len(self.s[i])
                     self.performance[i] = min((self.a[i]) / (self.ta[self.tasks[i]]), 1)
-                if episode_learn % config.file_logging_frequency_in_episodes == 0 and episode_learn > 0:
-                    performance = np.mean(self.performance)  # qam
-                    self.amta.save_model(performance)
+                avg_performance = np.mean(self.performance)  # qam
+                harmonic_performance = hmean(self.performance)
+                if (episode_learn % config.file_logging_frequency_in_episodes == 0 or
+                    (avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance)) \
+                        and episode_learn > 0:
+                    self.amta.save_model(avg_performance, harmonic_performance)
                     self.ma.save_model(self.amta.model.train_step)
                     self.amta.flush_tbw()
+                if avg_performance > self.best_avg_performance:
+                    self.best_avg_performance = avg_performance
+                if harmonic_performance > self.best_harmonic_performance:
+                    self.best_harmonic_performance = harmonic_performance
                 s_avg_norm = [self.a[i] / self.ta[self.tasks[i]] for i in range(len(self.a))]
                 s_avg_norm.sort()
                 s_min_l = s_avg_norm[0:self.l]
@@ -137,7 +152,7 @@ class MultiTaskLearning:
                                                               self.p, one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
                 action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
 
-            self.amta.save_model(performance)
+            self.amta.save_model(avg_performance, harmonic_performance)
             self.ma.save_model(self.amta.model.train_step)
             self.amta.exit_tbw()
 

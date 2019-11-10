@@ -1,13 +1,17 @@
 from MultiTaskA2C import MultitaskA2C
 from MultiTaskRunner import MultiTaskA2CRunner
+import config
+from Logger import Logger
+
 import gym
 from stable_baselines.common.vec_env import SubprocVecEnv
-import config
+from stable_baselines.common.vec_env import DummyVecEnv
+
 import os
-from Logger import Logger
 from collections import namedtuple
 import time
 import numpy as np
+
 
 class MultiTaskAgent:
     def __init__(self, model_id, policy, list_of_tasks, n_steps, max_train_steps, n_cpus, tensorboard_logging, logging):
@@ -28,7 +32,7 @@ class MultiTaskAgent:
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) else False
 
         if self.logging:
-            self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step train_step relative_performance scores policy_loss value_loss")
+            self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step episode_learn train_step relative_performance scores policy_loss value_loss")
             self.logger = Logger(self.model_id, self.list_of_tasks)
 
         data = None
@@ -48,12 +52,15 @@ class MultiTaskAgent:
         self.__setup_runners()
 
         self.train_step = {}
+        self.episode_learn_per_task = {}
         if data is None:
             for game in list_of_tasks:
                 self.train_step[game] = 0
+                self.episode_learn_per_task = 0
         else:
             for game in list_of_tasks:
                 self.train_step[game] = data[game]['train_step'].values[0]
+                self.episode_learn_per_task = data[game]['episode_learn'].values[0]
 
     def __setup_environments(self):
         for task in self.list_of_tasks:
@@ -84,8 +91,10 @@ class MultiTaskAgent:
         if self.logging:
             self.episode_learn += 1
             self.train_step[task] += train_steps
+            self.episode_learn_per_task[task] += 1
             log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time),
-                                      total_train_step=self.model.train_step, train_step=self.train_step[task],
+                                      total_train_step=self.model.train_step, episode_learn=self.episode_learn_per_task[task],
+                                      train_step=self.train_step[task],
                                       relative_performance=np.around(np.mean(ep_scores) / config.target_performances[task], 2),
                                       scores=np.around(np.mean(ep_scores), 2), policy_loss=np.around(policy_loss, 2),
                                       value_loss=np.around(value_loss, 2))
@@ -97,26 +106,34 @@ class MultiTaskAgent:
         return ep_scores, train_steps
 
     @staticmethod
-    def play(model_id, max_number_of_games, display=False):
-        model, games = MultitaskA2C.load(model_id)
-        for game in games:
-            number_of_games = 0
-            sum_reward = 0
-            env = gym.make(game)
-            obs = env.reset()
-            state = None  # (n_envs, 2*n_lstm)
-            mask = None  # [False for _ in range(self.n_envs_per_task)] TODO ez valszeg nem jó mert itt csak 1 enven játszok
-            while number_of_games < max_number_of_games:
-                action, state = model.predict(game, obs, state, mask)
-                obs, rewards, done, info = env.step(action)
-                if done:
-                    obs = env.reset()
-                    number_of_games += 1
-                    print(sum_reward)
-                    sum_reward = 0
-                sum_reward += rewards
+    def play_for_one_episode(model, env, n_games: int, display=False):
+        sum_reward = 0
+        if isinstance(env, str):
+            env = DummyVecEnv([lambda: gym.make(env)])
+        elif not isinstance(env, DummyVecEnv):
+                raise ValueError("Env must be a DummyVecEnv or a str!")
+        obs = env.reset()
+        done = False
+        state = None
+        mask = None
+        for i in range(n_games):
+            while not done:
+                action, state = model.predict(task, obs, state, mask)
+                obs, reward, done, info = env.step(action)
+                sum_reward += reward
                 if display is True:
                     env.render()
+        sum_reward = sum_reward / n_games
+        env.close()
+        return sum_reward
+
+    @staticmethod
+    def play(model_id, n_games=1, display=True):
+        model, tasks = MultitaskA2C.load(model_id)
+        for task in tasks:
+            print(task)
+            sum_reward = MultiTaskAgent.play_for_one_episode(model, task, n_games, display)
+            print("Achieved score: {}".format(sum_reward))
 
     def save_model(self, avg_performance, harmonic_performance):
         try:

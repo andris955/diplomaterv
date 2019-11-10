@@ -170,8 +170,8 @@ class Scheduler(object):
         :return: (float) the current value
         """
         schedule = self.schedule(self.step / self.nvalues)
-        if schedule < 0.05:
-            schedule = 0.05
+        if schedule < 0.01:
+            schedule = 0.01
         current_value = self.initial_value * schedule
         self.step += 1.
         return current_value
@@ -212,7 +212,7 @@ def _save_to_file(save_path, id, model, json_params=None, weights=None, params=N
 
 
 def _load_from_file(load_path, model):
-    if model != "multitask" or model != "meta":
+    if model != "multitask" and model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
     if isinstance(load_path, str):
         model_path = os.path.join(load_path, model + '_model.pkl')

@@ -27,14 +27,14 @@ def main(algorithm: str, selected_mti: list, policy: str, n_cpus: int, selected_
     if train:
         dir_check()
         if tensorboard_logging:
-            print("WARNING: TENSORBOARD LOGING ACTIVE -> IT LEAKS MEMORY")
-        mt = MultiTaskLearning(selected_mti, algorithm, policy, config.target_performances,
-                               n_cpus, logging, model_id, tensorboard_logging=tensorboard_logging)
+            print("WARNING: TENSORBOARD LOGGING ACTIVE -> IT LEAKS MEMORY")
+        mt = MultiTaskLearning(selected_mti, algorithm, policy, n_cpus,
+                               logging, model_id, tensorboard_logging=tensorboard_logging)
         mt.train()
     else:
-        MultiTaskAgent.play(model_id, max_number_of_games=3, display=True)
+        MultiTaskAgent.play(model_id, n_games=3, display=True)
 
 
 if __name__ == '__main__':
-    main(algorithm='EA4C', selected_mti=config.MTI1, policy="lstm", n_cpus=cpu_count(),
-         selected_gpus="all", train=True, tensorboard_logging=False, logging=False, model_id=None)
+    main(algorithm='A5C', selected_mti=config.MTI1, policy="lstm", n_cpus=cpu_count(),
+         selected_gpus="all", train=False, tensorboard_logging=True, logging=True, model_id="A5C_19_11_01_23_19")

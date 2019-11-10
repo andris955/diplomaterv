@@ -3,6 +3,8 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
+import sys
+import gym
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy, MultiTaskLSTMA2CPolicy
 
@@ -10,6 +12,8 @@ from stable_baselines.common.policies import LstmPolicy
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common import set_global_seeds
+from stable_baselines.common.vec_env import DummyVecEnv
+
 
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, SetVerbosity
@@ -71,7 +75,12 @@ class BaseMultitaskRLModel(ABC):
         """
         return self.env_dict
 
-    def set_env(self, env_dict, tasks):
+    def set_envs_by_name(self, tasks: list):
+        self.env_dict = {}
+        for task in tasks:
+            self.env_dict[task] = DummyVecEnv([lambda: gym.make(task)])
+
+    def set_envs(self, env_dict, tasks):
         """
         Checks the validity of the environment, and if it is coherent, set it as the current environment.
 
@@ -188,28 +197,36 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     def predict(self, game, observation, state=None, mask=None, deterministic=False):
+        assert isinstance(game, str), "Error: the game passed is not a string"
+
+        if game not in self.tasks:
+            raise ValueError("Error model was not trained on the game that you are trying to predict on!")
+
         if state is None:
             state = self.initial_state
         if mask is None:
             mask = [False for _ in range(self.n_envs_per_task)]
 
         observation = np.array(observation)
-        vectorized_env = utils._is_vectorized_observation(observation, self.observation_spaces[game])
-        assert isinstance(game, str), "Error: the game passed is not a string"
 
-        try:
-            self.env_dict[game]
-        except:
-            print("The game must be in the env_dict dictionary!")
-            exit()
+        vectorized_env = utils._is_vectorized_observation(observation, self.env_dict[game].observation_space)
 
-        observation = observation.reshape((-1,) + observation.shape)
+        zero_completed_obs = None
+        if self.policy_name == "lstm" and (observation.shape[0] != self.n_envs_per_task or not vectorized_env):
+            zero_completed_obs = np.zeros((self.n_envs_per_task,) + self.env_dict[game].observation_space.shape)
+            zero_completed_obs[0, :] = observation
+            observation = zero_completed_obs
+        elif not vectorized_env:
+            observation = np.zeros((1,) + observation.shape)
+
         actions, value, state, neglogp = self.step(game, observation, state, mask, deterministic=deterministic)
 
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
             actions = actions[0]
+        elif zero_completed_obs is not None:
+            actions = [actions[0]]
 
         return actions, state
 
@@ -219,26 +236,37 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
     @classmethod
     def load(cls, model_id, envs_to_set=None, transfer=False):
+        #TODO This function does not update trainer/optimizer variables (e.g. momentum). As such training after using this function may lead to less-than-optimal results.
+
         load_path = os.path.join(config.model_path, model_id)
         weights, params = utils._load_from_file(load_path, "multitask")
 
-        model = cls(policy=params['policy'], env_dict=None, _init_setup_model=False)
+        #TODO átmeneti
+        params['policy_name'] = 'lstm'
+        params['policy'] = MultiTaskLSTMA2CPolicy
+
+        model = cls(policy=params['policy_name'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
         # model.transfer_id.append(model_id)
 
         tasks = params["tasks"]
 
-        if not transfer:
-            model.setup_step_model()
-        else:
+        #TODO átmeneti
+        import gym
+        model.observation_spaces = [gym.make(env).observation_space for env in model.tasks]
+
+        if transfer:
+            model.setup_train_model(transfer=True)
             tasks_to_set = [key for key in envs_to_set.keys()]
             if tasks == tasks_to_set:
-                model.set_env(envs_to_set, tasks)
-                model.setup_train_model(transfer=True)
+                model.set_envs(envs_to_set, tasks)
             else:
                 print("The envs passed as argument is not corresponding to the envs that the model "
                       "is trained on.\n Trained on: {} \n Passed: {}".format(tasks, tasks_to_set))
-                exit()
+                sys.exit()
+        else:
+            model.setup_step_model()
+            model.set_envs_by_name(tasks)
 
         restores = []
         for param, loaded_weight in zip(model.trainable_variables, weights):
@@ -337,17 +365,23 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
     def setup_step_model(self):
         assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                    "instance of common.policies.ActorCriticPolicy."
+                                                                    "instance of MultiTaskActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():
             self.sess = tf_utils.make_session(graph=self.graph)
 
-            step_model = self.policy(self.sess, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                     reuse=False)
+            n_batch_step = None
+            if issubclass(self.policy, MultiTaskLSTMA2CPolicy):
+                n_batch_step = self.n_envs_per_task
+
+            step_model = self.policy(self.sess,  self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
+                                     n_batch=n_batch_step, reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
+            self.value = step_model.value
+            self.initial_state = step_model.initial_state
 
     def setup_train_model(self, transfer=False):
         with SetVerbosity(self.verbose):
@@ -493,6 +527,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         policy_loss = value_loss = None
         ep_train_step = 0
 
+        # TODO maximalizálni a training stepet, mert így prioritás inverzió van. Ehhez meg kell írni a performance testet.
         while mask != [True]*self.n_envs_per_task:
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
@@ -533,6 +568,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         return ep_scores, policy_loss, value_loss, ep_train_step
 
     def save(self, save_path, id):
+        #TODO zipbe mentés
         params = {
             "tasks": self.tasks,
             "gamma": self.gamma,
@@ -545,9 +581,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
-            "policy": self.policy_name,
+            "policy_name": self.policy_name,
             #'env_dict': self.env_dict, # nem lehet lementeni a TypeError: Pickling an AuthenticationString object is disallowed for security reasons miatt.
-            # "observation_spaces": self.observation_spaces,
+            "observation_spaces": self.observation_spaces,
             "action_space_dict": self.action_space_dict,
             "n_envs_per_task": self.n_envs_per_task,
             'tensorboard_log': self.tensorboard_log,
@@ -557,7 +593,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         }
 
         json_params = {
-            "policy": self.policy_name,
+            "policy_name": self.policy_name,
             "tasks": self.tasks,
             "gamma": self.gamma,
             "n_steps": self.n_steps,

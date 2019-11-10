@@ -107,6 +107,7 @@ data/
 .idea/
 .original
 original/
+proba.py
 
 # mypy
 .mypy_cache/

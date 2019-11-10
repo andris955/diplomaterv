@@ -47,7 +47,7 @@ target_performances = {
     'Enduro-v0': 0.77
 }
 
-number_of_episodes_for_estimating = 10
+number_of_episodes_for_estimating = 3
 uniform_policy_steps = 100_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
 max_train_steps = 10_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
 tau = 1
@@ -55,7 +55,7 @@ tau = 1
 n_steps = 10
 
 stdout_logging_frequency_in_train_steps = 100
-file_logging_frequency_in_episodes = 15  # number of episodes
+file_logging_frequency_in_episodes = 5  # number of episodes
 verbose = 1
 
 meta_layers = (100, 100, "lstm")

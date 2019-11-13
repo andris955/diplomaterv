@@ -61,7 +61,6 @@ class Logger:
         except:
             print("Values must be a namedtuple")
 
-
     def dump(self):
         self.__make_pd_data()
         for game in self.listofgames:

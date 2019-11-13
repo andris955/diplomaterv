@@ -6,9 +6,7 @@ from MultiTaskAgent import MultiTaskAgent
 from MetaAgent import MetaAgent
 import utils
 import datetime
-from scipy.stats import hmean
-from stable_baselines.common.vec_env import DummyVecEnv
-import gym
+from PerformanceLogger import PerformanceLogger
 
 class MultiTaskLearning:
     def __init__(self, set_of_tasks, algorithm, policy, n_cpus,
@@ -42,18 +40,14 @@ class MultiTaskLearning:
 
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
-        self.performance = np.zeros(len(self.tasks))
-
-        self.env_for_test = {}
-        for task in self.tasks:
-            self.env_for_test[task] = DummyVecEnv([lambda: gym.make(task)])
 
         self.max_train_steps = config.max_train_steps  # Total number of training steps for the algorithm
         self.uniform_policy_steps = config.uniform_policy_steps  # Number of tasks to consider in the computation of r2.
         self.n = config.number_of_episodes_for_estimating  # Number of episodes which are used for estimating current average performance in any task Ti
 
-        self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.max_train_steps,
-                                   self.n_cpus, tensorboard_logging, self.logging)
+        self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.max_train_steps, self.n_cpus, tensorboard_logging)
+
+        self.performance_logger = PerformanceLogger(self.tasks, self.model_id)
 
         meta_n_steps = 5 #TODO ennek utána nézni, valamint a n_stepsnek a runnerben és a multitaska2cben és policyben tanitásnál és predictnél
         meta_decider = MetaAgent(self.model_id, self.max_train_steps, meta_n_steps, 3*len(self.tasks), len(self.tasks))
@@ -74,22 +68,25 @@ class MultiTaskLearning:
     def __A5C_init(self):
         self.m = []
         self.tau = config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
-
         for _ in range(len(self.tasks)):
             self.m.append(1.0)
 
     #TODO mengézni a samplinget kicsit fura h nem a legrosszabbat samplingeli
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
-            episode_learn = 0
+            episode_learnt = 0
+            policy_loss = 0
+            value_loss = 0
             while 1:
                 for j in range(len(self.tasks)):
                     self.a[j] = sum(self.s[j])/len(self.s[j])
                     self.m[j] = (self.ta[self.tasks[j]] - self.a[j]) / (self.ta[self.tasks[j]] * self.tau)  # minél kisebb annál jobban teljesít az ágens az adott gamen
                 if self.amta.model.train_step > self.uniform_policy_steps:
                     self.p = utils.softmax(np.asarray(self.m))
-                if episode_learn % config.file_logging_frequency_in_episodes == 0 and episode_learn > 0:
-                    avg_performance, harmonic_performance = self.performance_test(n_games=self.n)
+                if episode_learnt % config.file_logging_frequency_in_episodes == 0 and episode_learnt > 0:
+                    avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
+                    for i, task in enumerate(self.tasks):
+                        self.performance_logger.log(task, episode_learnt, train_steps, self.total_train_steps, self.scores[i], policy_loss, value_loss) # TODO befejezni
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance)
                     self.amta.flush_tbw()
@@ -99,13 +96,10 @@ class MultiTaskLearning:
                         self.best_harmonic_performance = harmonic_performance
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
-                episode_learn += 1
+                episode_learnt += 1
                 self.s[j].append(np.mean(ep_scores))
                 if len(self.s[j]) > self.n:
                     self.s[j].pop(0)
-
-            # self.amta.save_model(avg_performance, harmonic_performance)
-            # self.amta.exit_tbw()
 
     def __EA4C_init(self, meta_decider, lambda_):
         self.l = len(self.tasks) // 2
@@ -158,13 +152,3 @@ class MultiTaskLearning:
             self.__A5C_train()
         elif self.algorithm == "EA4C":
             self.__EA4C_train()
-
-    def performance_test(self, n_games):
-        scores = np.zeros([len(self.tasks)])
-        for i, task in enumerate(self.tasks):
-            scores[i] = self.amta.play_for_one_episode(self.amta.model, self.env_for_test[task], n_games)
-            self.performance[i] = min(scores[i] / self.ta[task], 1)
-        avg_performance = np.around(np.mean(self.performance), 2)
-        harmonic_performance = np.around(hmean(self.performance), 2)
-        return avg_performance, harmonic_performance
-

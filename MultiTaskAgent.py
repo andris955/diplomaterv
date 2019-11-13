@@ -32,7 +32,8 @@ class MultiTaskAgent:
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) else False
 
         if self.logging:
-            self.LogValue = namedtuple("LogValue", "elapsed_time total_train_step episode_learn train_step relative_performance scores policy_loss value_loss")
+            self.logvalue = namedtuple("LogValue", "elapsed_time total_train_steps episode_learnt train_steps relative_performance "
+                                                   "score policy_loss value_loss")
             self.logger = Logger(self.model_id, self.list_of_tasks)
 
         data = None
@@ -92,11 +93,11 @@ class MultiTaskAgent:
             self.episode_learn += 1
             self.train_step[task] += train_steps
             self.episode_learn_per_task[task] += 1
-            log_value = self.LogValue(elapsed_time=int(time.time()-self.start_time),
-                                      total_train_step=self.model.train_step, episode_learn=self.episode_learn_per_task[task],
-                                      train_step=self.train_step[task],
+            log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),
+                                      total_train_steps=self.model.train_step, episode_learnt=self.episode_learn_per_task[task],
+                                      train_steps=self.train_step[task],
                                       relative_performance=np.around(np.mean(ep_scores) / config.target_performances[task], 2),
-                                      scores=np.around(np.mean(ep_scores), 2), policy_loss=np.around(policy_loss, 2),
+                                      score=np.around(np.mean(ep_scores), 2), policy_loss=np.around(policy_loss, 2),
                                       value_loss=np.around(value_loss, 2))
             self.logger.log(task, log_value)
             self.data_available[self.list_of_tasks.index(task)] = True
@@ -106,12 +107,10 @@ class MultiTaskAgent:
         return ep_scores, train_steps
 
     @staticmethod
-    def play_for_one_episode(model, env, n_games: int, display=False):
+    def play_n_game(model, task: str, n_games: int, display=False, env=None):
         sum_reward = 0
-        if isinstance(env, str):
-            env = DummyVecEnv([lambda: gym.make(env)])
-        elif not isinstance(env, DummyVecEnv):
-                raise ValueError("Env must be a DummyVecEnv or a str!")
+        if env is None:
+            env = DummyVecEnv([lambda: gym.make(task)])
         obs = env.reset()
         done = False
         state = None
@@ -132,7 +131,7 @@ class MultiTaskAgent:
         model, tasks = MultitaskA2C.load(model_id)
         for task in tasks:
             print(task)
-            sum_reward = MultiTaskAgent.play_for_one_episode(model, task, n_games, display)
+            sum_reward = MultiTaskAgent.play_n_game(model, task, n_games, display)
             print("Achieved score: {}".format(sum_reward))
 
     def save_model(self, avg_performance, harmonic_performance):

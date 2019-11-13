@@ -52,6 +52,7 @@ uniform_policy_steps = 100_000  # Number of training steps for which a uniformly
 max_train_steps = 10_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
 tau = 1
 
+max_timesteps_per_episode = 1_000
 n_steps = 10
 
 stdout_logging_frequency_in_train_steps = 100

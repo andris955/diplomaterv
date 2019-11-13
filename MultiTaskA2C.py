@@ -196,9 +196,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     def setup_step_model(self):
         pass
 
-    def predict(self, game, observation, state=None, mask=None, deterministic=False):
-        assert isinstance(game, str), "Error: the game passed is not a string"
-
+    def predict(self, game: str, observation, state=None, mask=None, deterministic=False):
         if game not in self.tasks:
             raise ValueError("Error model was not trained on the game that you are trying to predict on!")
 
@@ -528,7 +526,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         ep_train_step = 0
 
         # TODO maximalizálni a training stepet, mert így prioritás inverzió van. Ehhez meg kell írni a performance testet.
-        while mask != [True]*self.n_envs_per_task:
+        while mask != [True]*self.n_envs_per_task or ep_train_step >= config.max_train_steps: # TODO while not True in self.n_envs_per_task -> ezzel az a gond h amelyik leghamarabb befejezi az a legrosszabb.
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.train_step += 1
@@ -564,8 +562,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 logger.dump_tabular()
 
         print("Game over: {}".format(mask))
+        full_episode = mask == [True]*self.n_envs_per_task
 
-        return ep_scores, policy_loss, value_loss, ep_train_step
+        return ep_scores, policy_loss, value_loss, ep_train_step, full_episode
 
     def save(self, save_path, id):
         #TODO zipbe mentés

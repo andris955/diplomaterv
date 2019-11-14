@@ -6,8 +6,9 @@ import multiprocessing
 from gym.spaces import Box
 import numpy as np
 import tensorflow as tf
-
 from stable_baselines import logger
+
+
 
 
 def observation_input(ob_spaces, batch_size=None):
@@ -41,10 +42,10 @@ def find_trainable_variables(key):
         return tf.trainable_variables()
 
 
-def tensorboard_logger(game, rews, advs, writer, step, obs=None):
+def tensorboard_logger(task, rews, advs, writer, step, obs=None):
     summary = tf.Summary()
-    summary.value.add(tag="discounted_reward/" + game, simple_value=None)
-    summary.value.add(tag="advantage/" + game, simple_value=None)
+    summary.value.add(tag="discounted_reward/" + task, simple_value=None)
+    summary.value.add(tag="advantage/" + task, simple_value=None)
     for i in range(len(rews)):
         summary.value[0].simple_value = rews[i]
         summary.value[1].simple_value = advs[i]

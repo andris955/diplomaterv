@@ -4,17 +4,42 @@ import json
 import gym
 import cloudpickle
 
-from MultiTaskPolicy import MultiTaskFeedForwardA2CPolicy, MultiTaskLSTMA2CPolicy
 
+class CustomMessengerClass:
+    def __init__(self, *args, **kwargs):
+        self.__dict__ = kwargs
+        for i, arg in enumerate(args):
+            if not isinstance(arg, str):
+                raise TypeError("Error: {}. arg ({}) not a string. All args must be a string".format(i, arg))
+            if arg not in self._fields:
+                update_dict = {arg: None}
+                self.__dict__.update(update_dict)
 
-def get_policy_from_string(policy):
-    if policy == "lstm":
-        return MultiTaskLSTMA2CPolicy
-    elif policy == "ff":
-        return MultiTaskFeedForwardA2CPolicy
-    else:
-        return MultiTaskFeedForwardA2CPolicy
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError("Index must be an integer")
+        if key >= len(self._fields):
+            raise IndexError("Index is out of bound")
+        return self.__dict__[self._fields[key]]
 
+    def __delitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError("Index must be an integer")
+        if key >= len(self._fields):
+            raise IndexError("Index is out of bound")
+        del self.__dict__[self._fields[key]]
+        self._fields.pop(key)
+
+    def __setitem__(self, key, value):
+        if not isinstance(key, int):
+            raise TypeError("Index must be an integer")
+        if key >= len(self._fields):
+            raise IndexError("Index is out of bound")
+        self.__dict__[self._fields[key]] = value
+
+    @property
+    def _fields(self):
+        return list(self.__dict__.keys())
 
 def _is_vectorized_observation(observation, observation_space):
     """

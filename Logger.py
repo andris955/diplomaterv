@@ -1,12 +1,13 @@
 import os
 import pandas as pd
 import config
+import sys
 
 
 class Logger:
-    def __init__(self, id, listofgames):
+    def __init__(self, id: str, tasks: list):
         self.id = id
-        self.listofgames = listofgames
+        self.tasks = tasks
         self.folder_path = os.path.join(config.log_path, self.id)
         if not os.path.exists(self.folder_path):
             os.mkdir(self.folder_path)
@@ -27,49 +28,49 @@ class Logger:
                 elapsed_time = data.tail(1)['elapsed_time'].values[0]
         return return_data, elapsed_time
 
-    def __save_path(self, game):
-        return os.path.join(self.folder_path, game + ".csv")
+    def __save_path(self, task: str):
+        return os.path.join(self.folder_path, task + ".csv")
 
     def __pd_data_init(self):
         self.data = {}
         self.pd_data = {}
-        for game in self.listofgames:
-            self.pd_data[game] = None
-            self.data[game] = {}
+        for task in self.tasks:
+            self.pd_data[task] = None
+            self.data[task] = {}
 
     def __make_pd_data(self):
-        for game in self.listofgames:
-            if self.pd_data[game] is None:
-                self.pd_data[game] = pd.DataFrame(self.data[game])
+        for task in self.tasks:
+            if self.pd_data[task] is None:
+                self.pd_data[task] = pd.DataFrame(self.data[task])
             else:
                 print("Error in Logger.py")
 
-    def log(self, game, values):
+    def log(self, task: str, values):
         try:
             if self.fields is None:
                 self.fields = values._fields
             elif self.fields != values._fields:
                 print("The fields of the named tuples must be consistent")
-
-            if self.data[game] == {}:
-                for field in self.fields:
-                    self.data[game][field] = []
-
-            for i, field in enumerate(self.fields):
-                self.data[game][field].append(values[i])
-
         except:
             print("Values must be a namedtuple")
+            sys.exit()
+
+        if self.data[task] == {}:
+            for field in self.fields:
+                self.data[task][field] = []
+
+        for i, field in enumerate(self.fields):
+            self.data[task][field].append(values[i])
 
     def dump(self):
         self.__make_pd_data()
-        for game in self.listofgames:
-            if os.path.exists(self.__save_path(game)):
-                with open(self.__save_path(game), 'a') as f:
-                    self.pd_data[game].to_csv(f, sep=";", index=False, header=False)
+        for task in self.tasks:
+            if os.path.exists(self.__save_path(task)):
+                with open(self.__save_path(task), 'a') as f:
+                    self.pd_data[task].to_csv(f, sep=";", index=False, header=False)
             else:
-                with open(self.__save_path(game), 'a') as f:
-                    self.pd_data[game].to_csv(f, sep=";", index=False)
+                with open(self.__save_path(task), 'a') as f:
+                    self.pd_data[task].to_csv(f, sep=";", index=False)
         self.__pd_data_init()
 
 

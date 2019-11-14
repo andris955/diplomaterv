@@ -29,6 +29,15 @@ def shared_network(scaled_images):
     return activ(linear(layer_4, 'fc2', n_hidden=256, init_scale=np.sqrt(2))) #512
 
 
+def get_policy_from_string(policy):
+    if policy == "lstm":
+        return MultiTaskLSTMA2CPolicy
+    elif policy == "ff":
+        return MultiTaskFeedForwardA2CPolicy
+    else:
+        return MultiTaskFeedForwardA2CPolicy
+
+
 class BaseMultiTaskPolicy(ABC):
     """
     The base policy object
@@ -60,10 +69,11 @@ class BaseMultiTaskPolicy(ABC):
         self.ob_spaces = ob_spaces
         self.ac_space_dict = ac_space_dict
 
-    def step(self, task, obs, state=None, mask=None):
+    def step(self, task: str, obs, state=None, mask=None):
         """
         Returns the policy for a single step
 
+        :param task: (str) Name of task, which is in self.tasks
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
@@ -75,6 +85,7 @@ class BaseMultiTaskPolicy(ABC):
         """
         Returns the action probability for a single step
 
+        :param task: (str) Name of task, which is in self.tasks
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
@@ -120,22 +131,23 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.neglogp = {}
         self.policy_proba = {}
         self._value = {}
-        for key in self.tasks:
-            with tf.variable_scope(key + "_output", reuse=True):
+        for task in self.tasks:
+            with tf.variable_scope(task + "_output", reuse=True):
                 assert self.policy_dict is not {} and self.proba_distribution_dict is not {} and self.value_fn_dict is not {}
-                self.action[key] = self.proba_distribution_dict[key].sample()
-                self.deterministic_action[key] = self.proba_distribution_dict[key].mode()
-                self.neglogp[key] = self.proba_distribution_dict[key].neglogp(self.action[key])
-                if isinstance(self.proba_distribution_dict[key], CategoricalProbabilityDistribution):
-                    self.policy_proba[key] = tf.nn.softmax(self.policy_dict[key])
+                self.action[task] = self.proba_distribution_dict[task].sample()
+                self.deterministic_action[task] = self.proba_distribution_dict[task].mode()
+                self.neglogp[task] = self.proba_distribution_dict[task].neglogp(self.action[task])
+                if isinstance(self.proba_distribution_dict[task], CategoricalProbabilityDistribution):
+                    self.policy_proba[task] = tf.nn.softmax(self.policy_dict[task])
                 else:
-                    self.policy_proba[key] = []  # it will return nothing, as it is not implemented
-                self._value[key] = self.value_fn_dict[key][:, 0]
+                    self.policy_proba[task] = []  # it will return nothing, as it is not implemented
+                self._value[task] = self.value_fn_dict[task][:, 0]
 
     def step(self, task, obs, state=None, mask=None, deterministic=False):
         """
         Returns the policy for a single step
 
+        :param task: (str) Name of task, which is in self.tasks
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
@@ -148,6 +160,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         """
         Returns the action probability for a single step
 
+        :param task: (str) Name of task, which is in self.tasks
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
@@ -159,6 +172,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         """
         Returns the value for a single step
 
+        :param task: (str) Name of task, which is in self.tasks
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
@@ -174,13 +188,13 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = feature_extractor(self.processed_obs)
 
-        for key in self.pdtype_dict.keys():
-            with tf.variable_scope(key + "_model", reuse=reuse):
-                self.value_fn_dict[key] = linear(vf_latent, 'vf', 1)
-                proba_distribution, policy, q_value = self.pdtype_dict[key].proba_distribution_from_latent(self.pi_latent, vf_latent, init_scale=0.01)
-                self.proba_distribution_dict[key] = proba_distribution # distribution lehet vele sample neglog entropy a policy layeren
-                self.policy_dict[key] = policy # egy linear layer
-                self.q_value_dict[key] = q_value # linear layer
+        for task in self.pdtype_dict.keys():
+            with tf.variable_scope(task + "_model", reuse=reuse):
+                self.value_fn_dict[task] = linear(vf_latent, 'vf', 1)
+                proba_distribution, policy, q_value = self.pdtype_dict[task].proba_distribution_from_latent(self.pi_latent, vf_latent, init_scale=0.01)
+                self.proba_distribution_dict[task] = proba_distribution # distribution lehet vele sample neglog entropy a policy layeren
+                self.policy_dict[task] = policy # egy linear layer
+                self.q_value_dict[task] = q_value # linear layer
 
         self.initial_state = None
 
@@ -235,14 +249,14 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
             rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
             latent_vector = seq_to_batch(rnn_output) # (n_steps * n_envs) x n_lstm
 
-        for key in self.pdtype_dict.keys():
-            with tf.variable_scope(key + "_model", reuse=reuse):
-                self.value_fn_dict[key] = linear(latent_vector, 'vf', 1)
-                proba_distribution, policy, q_value = self.pdtype_dict[key].\
+        for task in self.pdtype_dict.keys():
+            with tf.variable_scope(task + "_model", reuse=reuse):
+                self.value_fn_dict[task] = linear(latent_vector, 'vf', 1)
+                proba_distribution, policy, q_value = self.pdtype_dict[task].\
                     proba_distribution_from_latent(latent_vector, latent_vector, init_scale=0.01)
-                self.proba_distribution_dict[key] = proba_distribution  # distribution lehet vele sample neglog entropy a policy layeren
-                self.policy_dict[key] = policy  # egy linear layer
-                self.q_value_dict[key] = q_value  # linear layer
+                self.proba_distribution_dict[task] = proba_distribution  # distribution lehet vele sample neglog entropy a policy layeren
+                self.policy_dict[task] = policy  # egy linear layer
+                self.q_value_dict[task] = q_value  # linear layer
 
         self.initial_state = np.zeros((self.n_envs_per_task, n_lstm * 2), dtype=np.float32)
         self._setup_init()

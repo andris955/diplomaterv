@@ -1,17 +1,15 @@
 import os
 import tensorflow as tf
-import glob
 
 
 class TensorboardWriter:
-    def __init__(self, graph, tensorboard_log_path, tb_log_name):
+    def __init__(self, graph: tf.Graph, tensorboard_log_path: str, tb_log_name: str):
         """
         Create a Tensorboard writer for a code segment, and saves it to the log directory as its own run
 
         :param graph: (Tensorflow Graph) the model graph
         :param tensorboard_log_path: (str) the save path for the log (can be None for no logging)
         :param tb_log_name: (str) the name of the run for tensorboard log
-        :param new_tb_log: (bool) whether or not to create a new logging folder for tensorbaord
         """
         self.graph = graph
         self.tensorboard_log_path = tensorboard_log_path

@@ -1,11 +1,12 @@
 import numpy as np
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.a2c.utils import discount_with_dones
+from stable_baselines.common.vec_env import VecEnv
 import gym
 
 
 class MultiTaskA2CRunner(AbstractEnvRunner):
-    def __init__(self, env_name, env, model, n_steps=5, gamma=0.99):
+    def __init__(self, env_name: str, env: VecEnv, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
 

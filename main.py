@@ -32,7 +32,7 @@ def main(algorithm: str, selected_mti: list, policy: str, n_cpus: int, selected_
                                logging, model_id, tensorboard_logging=tensorboard_logging)
         mt.train()
     else:
-        MultiTaskAgent.play(model_id, n_games=3, display=True)
+        MultiTaskAgent.play(model_id, n_games=1, display=True)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 import tensorflow as tf
 import cloudpickle
 import os
-
+import numpy as np
 import utils
 import config
 
@@ -33,8 +33,8 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, total_train_steps, input_length, output_length, n_steps, seed=None, gamma=0.99, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
+    def __init__(self, total_train_steps: int, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.99, vf_coef=0.25, ent_coef=0.01,
+                 max_grad_norm=0.5, learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmActorCriticPolicy
         self.verbose = verbose
@@ -137,7 +137,7 @@ class MetaA2CModel:
             self.initial_state = self.policy_model.initial_state
             tf.global_variables_initializer().run(session=self.sess)
 
-    def train_step(self, inputs, rewards, actions, values):
+    def train_step(self, inputs: np.ndarray, rewards, actions, values):
         """
         applies a training step to the model
         """
@@ -152,7 +152,7 @@ class MetaA2CModel:
 
         return policy_loss, value_loss, policy_entropy
 
-    def save(self, save_path, id):
+    def save(self, save_path: str, id: str):
         """
         Save the current parameters to file
 
@@ -202,12 +202,10 @@ class MetaA2CModel:
         utils._save_to_file(save_path, id, 'meta', json_params=json_params, weights=weights, params=params)
 
     @classmethod
-    def load(cls, model_id,  input_len, output_len):
+    def load(cls, model_id: str,  input_len: int, output_len: int):
         """
         Load the model from file
 
-        :param load_path: (str or file-like) the saved parameter location
-            (can be None if you only need prediction from a trained model)
         """
         load_path = os.path.join(config.model_path, model_id)
         weights, params = utils._load_from_file(load_path, 'meta')
@@ -228,7 +226,7 @@ class MetaA2CModel:
         return model
 
     @staticmethod
-    def _load_from_file(load_path):
+    def _load_from_file(load_path: str):
         if isinstance(load_path, str):
             if not os.path.exists(load_path):
                 if os.path.exists(load_path + ".pkl"):

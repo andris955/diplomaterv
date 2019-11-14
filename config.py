@@ -49,7 +49,8 @@ target_performances = {
 
 number_of_episodes_for_estimating = 3
 uniform_policy_steps = 100_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-max_train_steps = 10_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
+max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
+max_episode_timesteps = 30.000 # TODO kitalálni
 tau = 1
 
 max_timesteps_per_episode = 1_000

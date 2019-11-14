@@ -8,7 +8,7 @@ from stable_baselines.a2c.utils import linear
 
 
 class MetaLstmActorCriticPolicy:
-    def __init__(self, sess, input_length, output_length, n_steps, layers, lstm_units):
+    def __init__(self, sess: tf.Session, input_length: int, output_length: int, n_steps: int, layers: list, lstm_units: int):
         self.input_length = input_length
         self.output_length = output_length
         self.n_steps = n_steps
@@ -65,10 +65,10 @@ class MetaLstmActorCriticPolicy:
 
         self.initial_state = np.zeros((self.n_steps, self.input_length), dtype=np.float32)
 
-    def step(self, input_state):
+    def step(self, input_state: np.ndarray):
         flat_param, value, neglogp = self.sess.run([self.flat_param, self._value, self.neglogp], {self.input_ph: input_state})
         return flat_param, value, neglogp
 
-    def value(self, input_state):
+    def value(self, input_state: np.ndarray):
         value = self.sess.run(self._value, {self.input_ph: input_state})
         return value

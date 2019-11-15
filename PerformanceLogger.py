@@ -20,11 +20,12 @@ class PerformanceLogger:
         self.start_time = time.time()
         self.data_available = False
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) and model_id else False
-        self.scores = np.zeros([len(self.tasks)])
-        self.avg_performance = 0
-        self.harmonic_performance = 0
-        self.env_for_test = envs_for_test
-        self.logobject = self.logvalue(self.log_value_list)
+        self.scores = np.zeros(len(self.tasks))
+        self.timesteps = np.zeros(len(self.tasks))
+        self.performance = np.zeros(len(self.tasks))
+        self.envs_for_test = envs_for_test
+        self.logobject = self.logvalue(*self.log_value_list)
+        self.worst_performing_task_timestep = 10000
 
         if self.transfer:
             _, elapsed_time = self.logger.init_train_data()
@@ -47,10 +48,10 @@ class PerformanceLogger:
         self.logger.dump()
 
     def performance_test(self, n_games: int, amta, ta: dict):
-        performance = np.zeros(len(self.tasks))
         for i, task in enumerate(self.tasks):
-            self.scores[i] = amta.play_n_game(amta.model, task, n_games, self.env_for_test[task])
-            performance[i] = min(self.scores[i] / ta[task], 1)
-        self.avg_performance = np.around(np.mean(performance), 2)
-        self.harmonic_performance = np.around(hmean(performance), 2)
-        return self.avg_performance, self.harmonic_performance
+            self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, self.envs_for_test[task])
+            self.performance[i] = min(self.scores[i] / ta[task], 1)
+        self.worst_performing_task_timestep = self.timesteps[self.performance.argmin()]
+        avg_performance = np.around(np.mean(self.performance), 2)
+        harmonic_performance = np.around(hmean(self.performance), 2)
+        return avg_performance, harmonic_performance

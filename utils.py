@@ -3,6 +3,7 @@ import os
 import json
 import gym
 import cloudpickle
+import config
 
 
 class CustomMessengerClass:
@@ -10,7 +11,7 @@ class CustomMessengerClass:
         self.__dict__ = kwargs
         for i, arg in enumerate(args):
             if not isinstance(arg, str):
-                raise TypeError("Error: {}. arg ({}) not a string. All args must be a string".format(i, arg))
+                raise TypeError("Error: {}. arg ({}) is not a string. All args must be a string".format(i, arg))
             if arg not in self._fields:
                 update_dict = {arg: None}
                 self.__dict__.update(update_dict)
@@ -211,7 +212,7 @@ class Scheduler(object):
         return self.initial_value * self.schedule(steps / self.nvalues)
 
 
-def _save_to_file(save_path, id, model, json_params=None, weights=None, params=None):
+def _save_model_to_file(save_path, id, model, json_params=None, weights=None, params=None):
     if model != "multitask" and model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
     if isinstance(save_path, str):
@@ -226,7 +227,6 @@ def _save_to_file(save_path, id, model, json_params=None, weights=None, params=N
             with open(model_path, "wb") as file_:
                 cloudpickle.dump((weights, params), file_)
 
-            # if not os.path.exists(param_path):
             with open(param_path, "w") as file_:
                 json.dump(json_params, file_)
         else:
@@ -236,7 +236,7 @@ def _save_to_file(save_path, id, model, json_params=None, weights=None, params=N
         raise ValueError("Error: save_path must be a string")
 
 
-def _load_from_file(load_path, model):
+def _load_model_from_file(load_path, model):
     if model != "multitask" and model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
     if isinstance(load_path, str):
@@ -252,10 +252,10 @@ def _load_from_file(load_path, model):
     return weights, params
 
 
-def read_params(transfer_id, model):
+def read_params(model_id, model):
     if model != "multitask" or model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
-    with open(os.path.join(os.path.join("./data/models/", transfer_id), model + '_params.json'), "r") as file:
+    with open(os.path.join(os.path.join(config.model_path, model_id), model + '_params.json'), "r") as file:
         params = json.load(file)
     return params
 

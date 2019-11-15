@@ -7,18 +7,17 @@ from stable_baselines import logger
 
 
 class MetaAgent:
-    def __init__(self, model_id: str, max_training_updates: int, n_steps: int, input_len: int, output_len: int):
+    def __init__(self, model_id: str, n_steps: int, input_len: int, output_len: int):
         self.model_id = model_id
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) and model_id else False
         self.input_len = input_len
         self.output_len = output_len
-        self.n_steps = n_steps
         if not self.transfer:
-            self.meta_learner = MetaA2CModel(max_training_updates, input_len, output_len, n_steps)
+            self.meta_learner = MetaA2CModel(input_len, output_len, n_steps)
         else:
             self.meta_learner = MetaA2CModel.load(model_id, input_len, output_len)
 
-        self.inputs = [np.zeros(self.input_len)] * self.n_steps
+        self.inputs = [np.zeros(self.input_len)] * n_steps
         self.train_step = 0
 
     def sample(self, game_input):

@@ -33,7 +33,7 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, total_train_steps: int, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.99, vf_coef=0.25, ent_coef=0.01,
+    def __init__(self, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.99, vf_coef=0.25, ent_coef=0.01,
                  max_grad_norm=0.5, learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmActorCriticPolicy
@@ -42,7 +42,7 @@ class MetaA2CModel:
         self.output_length = output_length
         self.num_train_steps = 0
         self.n_steps = n_steps
-        self.total_train_steps = total_train_steps
+        self.total_timesteps = config.max_timesteps/100
 
         self.gamma = gamma
         self.vf_coef = vf_coef
@@ -78,7 +78,7 @@ class MetaA2CModel:
         if seed is not None:
             set_global_seeds(seed)
 
-        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=total_train_steps,
+        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=self.total_timesteps,
                                                 schedule=self.lr_schedule, init_step=self.num_train_steps)
 
         if _init_setup_model:
@@ -174,7 +174,7 @@ class MetaA2CModel:
             "input_length": self.input_length,
             "output_length": self.output_length,
             "n_steps": self.n_steps,
-            "total_train_steps": self.total_train_steps,
+            "total_timesteps": self.total_timesteps,
             "layers": self.layers,
             "lstm_units": self.lstm_units,
         }
@@ -184,7 +184,7 @@ class MetaA2CModel:
             "output_length": self.output_length,
             "state_shape": self.initial_state.shape,
             "n_steps": self.n_steps,
-            "total_train_steps": self.total_train_steps,
+            "total_timesteps": self.total_timesteps,
             "gamma": self.gamma,
             "vf_coef": self.vf_coef,
             "ent_coef": self.ent_coef,
@@ -199,7 +199,7 @@ class MetaA2CModel:
 
         weights = self.sess.run(self.trainable_variables)
 
-        utils._save_to_file(save_path, id, 'meta', json_params=json_params, weights=weights, params=params)
+        utils._save_model_to_file(save_path, id, 'meta', json_params=json_params, weights=weights, params=params)
 
     @classmethod
     def load(cls, model_id: str,  input_len: int, output_len: int):
@@ -208,12 +208,12 @@ class MetaA2CModel:
 
         """
         load_path = os.path.join(config.model_path, model_id)
-        weights, params = utils._load_from_file(load_path, 'meta')
+        weights, params = utils._load_model_from_file(load_path, 'meta')
 
         if params['input_length'] != input_len or params['output_length'] != output_len:
             raise ValueError("The input and the output length must be the same as the model's that trying to load.")
 
-        model = cls(total_train_steps=params["total_train_steps"], input_length=params["input_length"], output_length=params["output_length"],
+        model = cls(input_length=params["input_length"], output_length=params["output_length"],
                     n_steps=params["n_steps"], _init_setup_model=False)
         model.__dict__.update(params)
         model.setup_model()
@@ -224,20 +224,3 @@ class MetaA2CModel:
         model.sess.run(restores)
 
         return model
-
-    @staticmethod
-    def _load_from_file(load_path: str):
-        if isinstance(load_path, str):
-            if not os.path.exists(load_path):
-                if os.path.exists(load_path + ".pkl"):
-                    load_path += ".pkl"
-                else:
-                    raise ValueError("Error: the file {} could not be found".format(load_path))
-
-            with open(load_path, "rb") as file:
-                data, params = cloudpickle.load(file)
-        else:
-            # Here load_path is a file-like object, not a path
-            data, params = cloudpickle.load(load_path)
-
-        return data, params

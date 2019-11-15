@@ -48,12 +48,9 @@ target_performances = {
 }
 
 number_of_episodes_for_estimating = 3
-uniform_policy_steps = 100_000  # Number of training steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe tehát kb itt k x 5_000_000 train step kéne
-max_episode_timesteps = 30.000 # TODO kitalálni
+uniform_policy_steps = 100_000  # Number of time steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
+max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe.
 tau = 1
-
-max_timesteps_per_episode = 1_000
 n_steps = 10
 
 stdout_logging_frequency_in_train_steps = 100
@@ -67,9 +64,3 @@ meta_lambda = 0.5
 tensorboard_log = "./data/tb_logs/"
 model_path = "./data/models/"
 log_path = "./data/logs/"
-
-if __name__ == '__main__':
-    import gym
-    for env_name in MTI7:
-        env = gym.make(env_name)
-        print("{} - {}".format(env_name, env.action_space))

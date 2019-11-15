@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import config
 import sys
+from utils import CustomMessengerClass
 
 
 class Logger:
@@ -20,13 +21,23 @@ class Logger:
     def init_train_data(self):
         return_data = {}
         elapsed_time = 0
+        total_episodes_learnt = 0
+        total_timesteps = 0
+        total_training_updates = 0
         files = [file for file in os.listdir(self.folder_path) if file[-4:] == ".csv"]
         for file_name in files:
             data = pd.read_csv(os.path.join(self.folder_path, file_name), sep=";")
-            return_data[file_name[:-4]] = data.tail(1)
+            return_data[file_name[:-4]] = data.tail(1) # only the last row
             if data.tail(1)['elapsed_time'].values[0] > elapsed_time:
                 elapsed_time = data.tail(1)['elapsed_time'].values[0]
-        return return_data, elapsed_time
+            if data.tail(1)['total_episodes_learnt'].values[0] > total_episodes_learnt:
+                total_episodes_learnt = data.tail(1)['total_episodes_learnt'].values[0]
+            if data.tail(1)['total_timesteps'].values[0] > total_timesteps:
+                total_timesteps = data.tail(1)['total_timesteps'].values[0]
+            if data.tail(1)['total_training_updates'].values[0] > total_training_updates:
+                total_training_updates = data.tail(1)['total_training_updates'].values[0]
+
+        return return_data, elapsed_time, total_episodes_learnt, total_timesteps, total_training_updates
 
     def __save_path(self, task: str):
         return os.path.join(self.folder_path, task + ".csv")
@@ -73,4 +84,7 @@ class Logger:
                     self.pd_data[task].to_csv(f, sep=";", index=False)
         self.__pd_data_init()
 
+if __name__ == '__main__':
+    logger = Logger("A5C_19_11_01_23_19", config.MTI1)
+    _, _ = logger.init_train_data()
 

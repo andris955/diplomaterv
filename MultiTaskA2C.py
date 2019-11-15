@@ -42,7 +42,7 @@ class BaseMultitaskRLModel(ABC):
         self.env_dict = env_dict
         self.tasks = [key for key in self.env_dict.keys()] if self.env_dict is not None else None
         self.verbose = config.verbose
-        self.observation_spaces = []
+        self.observation_space_dict = {}
         self.action_space_dict = {}
         self.n_envs_per_task = None
         self.num_timesteps = 0
@@ -51,7 +51,7 @@ class BaseMultitaskRLModel(ABC):
             if not isinstance(env_dict, dict):
                 print("env_dict must be a dictionary with keys as the name of the game and values are SubprocVecEnv objects")
             for key in env_dict.keys():
-                self.observation_spaces.append(env_dict[key].observation_space)
+                self.observation_space_dict[key] = env_dict[key].observation_space
                 self.action_space_dict[key] = env_dict[key].action_space
             for key in self.env_dict.keys():
                 if isinstance(self.env_dict[key], VecEnv):
@@ -98,7 +98,9 @@ class BaseMultitaskRLModel(ABC):
         # sanity checking the environment
         for key, env in env_dict.items():
             assert self.action_space_dict[key] == env.action_space, \
-                "Error: the environment passed must have at least the same action space as the model was trained on."
+                "Error: the environment passed must have the same action space as the model was trained on."
+            assert self.observation_space_dict[key] == env.observation_space, \
+                "Error: the environment passed must have the same observation space as the model was trained on."
             assert isinstance(env, VecEnv), \
                 "Error: the environment passed is not a vectorized environment, however {} requires it".format(
                     self.__class__.__name__)
@@ -109,9 +111,9 @@ class BaseMultitaskRLModel(ABC):
 
         self.env_dict = env_dict
         self.tasks = tasks
-        self.observation_spaces = [self.env_dict[key].observation_space for key in self.tasks]
         for key in self.tasks:
             self.action_space_dict[key] = self.env_dict[key].action_space
+            self.observation_space_dict[key] = self.env_dict[key].observation_space
 
     @abstractmethod
     def setup_train_model(self, transfer=False):
@@ -154,7 +156,7 @@ class BaseMultitaskRLModel(ABC):
         pass
 
     @abstractmethod
-    def save(self, save_path: str, id: str):
+    def save(self, save_path: str, id: str, json_params: dict):
         """
         Save the current parameters to file
 
@@ -165,7 +167,7 @@ class BaseMultitaskRLModel(ABC):
 
     @classmethod
     @abstractmethod
-    def load(cls, model_id: str, envs_to_set=None, transfer=False):
+    def load(cls, model_id: str, envs_to_set=None, transfer=False, total_train_steps=None, num_timesteps=None):
         raise NotImplementedError()
 
 
@@ -231,29 +233,28 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         return actions, state
 
     @abstractmethod
-    def save(self, save_path: str, name: str):
+    def save(self, save_path: str, name: str, json_params: dict):
         pass
 
     @classmethod
-    def load(cls, model_id: str, envs_to_set=None, transfer=False):
+    def load(cls, model_id: str, envs_to_set=None, transfer=False, total_train_steps=None, num_timesteps=None):
         #TODO This function does not update trainer/optimizer variables (e.g. momentum). As such training after using this function may lead to less-than-optimal results.
+        if transfer:
+            if not (total_train_steps or num_timesteps):
+                raise ValueError("If transfer learning is active total_train_steps and num_timesteps must be provided!")
+            else:
+                if not (type(total_train_steps, int) or type(num_timesteps, int)):
+                    raise TypeError("total_train_steps and num_timesteps must be integers")
 
         load_path = os.path.join(config.model_path, model_id)
-        weights, params = utils._load_from_file(load_path, "multitask")
-
-        #TODO átmeneti
-        params['policy_name'] = 'lstm'
-        params['policy'] = MultiTaskLSTMA2CPolicy
+        weights, params = utils._load_model_from_file(load_path, "multitask")
 
         model = cls(policy=params['policy_name'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
-        # model.transfer_id.append(model_id)
 
+        model.num_timesteps = num_timesteps
+        model.total_train_steps = total_train_steps
         tasks = params["tasks"]
-
-        #TODO átmeneti
-        import gym
-        model.observation_spaces = [gym.make(env).observation_space for env in model.tasks]
 
         if transfer:
             model.setup_train_model(transfer=True)
@@ -320,7 +321,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.alpha = alpha
         self.epsilon = epsilon
         self.lr_schedule = lr_schedule
-        self.learning_rate = learning_rate
+        self.initial_learning_rate = learning_rate
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -342,15 +343,17 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         self.summary = None
         self.episode_reward = None
         self.total_train_steps = 0
+        self.max_scheduler_timesteps = None
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
             self.setup_train_model()
 
-    def _setup_multitask_learn(self, model_name: str, max_timesteps: int, seed=3):
+    def _setup_multitask_learn(self, model_name: str, seed=3):
         self._setup_learn(seed)
-        self.total_timesteps = max_timesteps
-        self.learning_rate_schedule = utils.Scheduler(initial_value=self.learning_rate, n_values=self.total_timesteps,
+        if self.max_scheduler_timesteps is None:
+            self.max_scheduler_timesteps = config.max_timesteps
+        self.learning_rate_schedule = utils.Scheduler(initial_value=self.initial_learning_rate, n_values=self.max_scheduler_timesteps,
                                                       schedule=self.lr_schedule, init_step=self.num_timesteps)
 
         tbw = TensorboardWriter(self.graph, self.tensorboard_log, model_name)
@@ -374,7 +377,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             if issubclass(self.policy, MultiTaskLSTMA2CPolicy):
                 n_batch_step = self.n_envs_per_task
 
-            step_model = self.policy(self.sess,  self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
+            step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
                                      n_batch=n_batch_step, reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
@@ -400,11 +403,11 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     n_batch_step = self.n_envs_per_task
                     n_batch_train = self.n_envs_per_task * self.n_steps
 
-                step_model = self.policy(self.sess, self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task, n_steps=1,
+                step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
                                          n_batch=n_batch_step, reuse=False)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_utils.outer_scope_getter("train_model")):
-                    train_model = self.policy(self.sess, self.tasks, self.observation_spaces, self.action_space_dict, self.n_envs_per_task,
+                    train_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task,
                                               self.n_steps, n_batch_train, reuse=True)
 
                 with tf.variable_scope("loss", reuse=False):
@@ -456,7 +459,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 if not transfer:
                     self.sess.graph.finalize()
 
-    def _train_step(self, task: str, obs: list, states: list, rewards: list, masks: list, actions: list, values: list, writer=None):
+    def _train_step(self, task: str, obs: list, states: list, rewards, masks: list, actions: list, values, writer=None):
         """
         applies a training step to the model
 
@@ -527,8 +530,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         episode_training_updates = 0
         episode_timesteps = 0
 
-        # TODO maximalizálni a training stepet, mert így prioritás inverzió van.
-        while not True in mask or episode_timesteps >= max_episode_timesteps:
+        while (not (True in mask)) or episode_timesteps >= max_episode_timesteps:
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.total_train_steps += 1
@@ -550,7 +552,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.num_timesteps += self.n_batch
             episode_training_updates += 1
 
-            if self.verbose >= 1 and ((self.total_train_steps % config.stdout_logging_frequency_in_train_steps == 0) or (mask == [True] * self.n_envs_per_task)):
+            if self.verbose >= 1 and ((self.total_train_steps % config.stdout_logging_frequency_in_train_steps == 0) or True in mask):
                 explained_var = explained_variance(values, rewards)
                 logger.record_tabular("training_updates", self.total_train_steps)
                 logger.record_tabular("total_timesteps", self.num_timesteps)
@@ -561,60 +563,53 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 logger.record_tabular("explained_variance", float(explained_var))
                 logger.dump_tabular()
 
-        print("Game over: {}".format(mask))
         full_episode = True in mask
+        print("Game over: {}".format(full_episode))
+
 
         return episode_score, policy_loss, value_loss, episode_training_updates, full_episode
 
-    def save(self, save_path: str, id: str):
-        #TODO zipbe mentés
+    def save(self, save_path: str, id: str, json_params: dict):
         params = {
+            "policy_name": self.policy_name,
             "tasks": self.tasks,
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
             "ent_coef": self.ent_coef,
             "max_grad_norm": self.max_grad_norm,
-            "learning_rate": self.learning_rate,
+            "initial_learning_rate": self.initial_learning_rate,
             "alpha": self.alpha,
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
             "verbose": self.verbose,
-            "policy_name": self.policy_name,
-            "observation_spaces": self.observation_spaces,
+            "observation_space_dict": self.observation_space_dict,
             "action_space_dict": self.action_space_dict,
             "n_envs_per_task": self.n_envs_per_task,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
-            "total_train_steps": self.total_train_steps,
-            "num_timesteps": self.num_timesteps,
+            "max_scheduler_timesteps": self.max_scheduler_timesteps,
         }
 
-        json_params = {
-            "policy_name": self.policy_name,
-            "tasks": self.tasks,
+        json_params.update({
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
             "ent_coef": self.ent_coef,
             "max_grad_norm": self.max_grad_norm,
-            "learning_rate": self.learning_rate,
+            "initial_learning_rate": self.initial_learning_rate,
             "alpha": self.alpha,
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
-            "observation_spaces": [ob_space.shape for ob_space in self.observation_spaces],
+            "observation_spaces": [ob_space.shape for ob_space in self.observation_space_dict.values()],
             "action_spaces": {},
             "n_envs_per_task": self.n_envs_per_task,
-            "max_time_steps": config.max_timesteps,
-            "uniform_policy_steps": config.uniform_policy_steps,
-            "number_of_episodes_for_estimating": config.number_of_episodes_for_estimating,
-            "total_train_steps": self.total_train_steps,
-            "num_timesteps": self.num_timesteps,
-        }
+            "max_scheduler_timesteps": self.max_scheduler_timesteps,
+        })
 
         for game, value in self.action_space_dict.items():
             json_params["action_spaces"][game] = value.n
 
-        weights = self.sess.run(self.trainable_variables)
+        weights = self.sess.run(self.trainable_variables)  # Only works with python > 3.6 because of default insertion order dictionaries.
 
-        utils._save_to_file(save_path, id, 'multitask', json_params=json_params, weights=weights, params=params)
+        utils._save_model_to_file(save_path, id, 'multitask', json_params=json_params, weights=weights, params=params)

@@ -17,7 +17,6 @@ def shared_network(scaled_images):
 
 
     :param scaled_images: (TensorFlow Tensor) Image input placeholder
-    :param kwargs: (dict) Extra keywords parameters for the convolutional layers of the CNN
     :return: (TensorFlow Tensor) The CNN output layer
     """
     activ = tf.nn.relu
@@ -54,19 +53,19 @@ class BaseMultiTaskPolicy(ABC):
         and the processed observation placeholder respectivly
     """
 
-    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=False):
+    def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
+                 n_envs_per_task: int, n_steps: int, n_batch: int, reuse=False):
         self.n_envs_per_task = n_envs_per_task
         self.tasks = tasks
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(ob_spaces, n_batch)
+            self.obs_ph, self.processed_obs = observation_input(list(ob_spaces.values()), n_batch)
         if n_batch is None:
             self.n_batch = self.n_envs_per_task * self.n_steps
         else:
             self.n_batch = n_batch
         self.sess = sess
         self.reuse = reuse
-        self.ob_spaces = ob_spaces
         self.ac_space_dict = ac_space_dict
 
     def step(self, task: str, obs, state=None, mask=None):
@@ -108,7 +107,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     :param scale: (bool) whether or not to scale the input
     """
 
-    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=False):
+    def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
+                 n_envs_per_task: int, n_steps: int, n_batch: int, reuse=False):
         super(MultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=reuse)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
@@ -234,7 +234,7 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
     """
 
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, n_lstm=256, reuse=False,
-                 feature_extractor=shared_network, layer_norm=False):
+                 feature_extractor=shared_network, layer_norm=True):
         super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse)
 
         with tf.variable_scope("input", reuse=True):

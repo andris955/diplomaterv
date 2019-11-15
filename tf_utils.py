@@ -9,8 +9,6 @@ import tensorflow as tf
 from stable_baselines import logger
 
 
-
-
 def observation_input(ob_spaces, batch_size=None):
     for ob_space in ob_spaces:
         if isinstance(ob_space, Box):
@@ -27,7 +25,7 @@ def observation_input(ob_spaces, batch_size=None):
     return observation_ph, processed_observations
 
 
-def find_trainable_variables(key):
+def find_trainable_variables(key: str):
     """
     Returns the trainable variables within a given scope
     :param key: (str) The variable scope
@@ -42,7 +40,7 @@ def find_trainable_variables(key):
         return tf.trainable_variables()
 
 
-def tensorboard_logger(task, rews, advs, writer, step, obs=None):
+def tensorboard_logger(task, rews, advs, writer, step):
     summary = tf.Summary()
     summary.value.add(tag="discounted_reward/" + task, simple_value=None)
     summary.value.add(tag="advantage/" + task, simple_value=None)

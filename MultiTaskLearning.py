@@ -9,17 +9,18 @@ import datetime
 from PerformanceLogger import PerformanceLogger
 from stable_baselines.common.vec_env import DummyVecEnv
 import gym
+from collections import deque
 
 
 class MultiTaskLearning:
-    def __init__(self, tasks: list, algorithm: str, policy, n_cpus: int,
+    def __init__(self, tasks: list, algorithm: str, policy: str, n_cpus: int, json_params: dict,
                  logging=True, model_id=None, tensorboard_logging=False, verbose=1):
         """
 
         :param algorithm: Chosen multi-task algorithm. Available: 'A5C','EA4C' ...
         """
         self.algorithm = algorithm
-        if model_id is not None:
+        if model_id:
             if tasks is not None:
                 print("The given set of tasks is overwritten by the tasks used by the referred model (transfer_id).")
             params = read_params(model_id, "multitask")
@@ -43,11 +44,10 @@ class MultiTaskLearning:
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
 
-        self.max_timesteps = config.max_timesteps  # Total number of steps for the algorithm
         self.uniform_policy_steps = config.uniform_policy_steps  # Number of tasks to consider in the computation of r2.
         self.n = config.number_of_episodes_for_estimating  # Number of episodes which are used for estimating current average performance in any task Ti
 
-        self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.max_timesteps, self.n_cpus, tensorboard_logging)
+        self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging)
 
         env_for_test = {}
         for task in self.tasks:
@@ -55,16 +55,27 @@ class MultiTaskLearning:
 
         self.performance_logger = PerformanceLogger(tasks=self.tasks, model_id=self.model_id, envs_for_test=env_for_test, ta=self.ta)
 
-        meta_n_steps = 5 #TODO ennek utána nézni.
-        meta_decider = MetaAgent(self.model_id, self.max_timesteps, meta_n_steps, 3 * len(self.tasks), len(self.tasks))
+        meta_n_steps = 5 # TODO ennek utána nézni.
+        meta_decider = MetaAgent(self.model_id, meta_n_steps, 3 * len(self.tasks), len(self.tasks))
 
         self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
         self.s = []  # List of last n scores that the multi-tasking agent scored during training on task Ti.
         self.a = []  # Average scores for every task
 
         for _ in range(len(self.tasks)):
-            self.s.append([1.0]) # Harmonic performance miatt nem lehet 0.0
+            self.s.append(deque([1.0], 1))
             self.a.append(0.0)
+
+        self.json_params = json_params
+        self.json_params.update({
+            'algorithm': self.algorithm,
+            'tasks': self.tasks,
+            "model_id": self.model_id,
+            "uniform_policy_steps": self.uniform_policy_steps,
+            "number_of_episodes_for_estimating": self.n,
+            "best_avg_performance": self.best_avg_performance,
+            "best_harmonic_performance": self.best_harmonic_performance,
+        })
 
         if self.algorithm == "A5C":
             self.__A5C_init()
@@ -77,31 +88,29 @@ class MultiTaskLearning:
         for _ in range(len(self.tasks)):
             self.m.append(1.0)
 
-    #TODO mengézni a samplinget kicsit fura h nem a legrosszabbat samplingeli
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
             while 1:
                 for j in range(len(self.tasks)):
                     self.a[j] = sum(self.s[j])/len(self.s[j])
                     self.m[j] = max(self.ta[self.tasks[j]] - self.a[j], 0) / (self.ta[self.tasks[j]] * self.tau)  # minél kisebb annál jobban teljesít az ágens az adott gamen
-                if self.amta.model.train_step > self.uniform_policy_steps:
+                if self.amta.total_episodes_learnt > self.uniform_policy_steps:
                     self.p = utils.softmax(np.asarray(self.m))
-                if self.amta.episodes_learnt % config.file_logging_frequency_in_episodes == 0 and self.amta.episodes_learnt > 0:
+                if self.amta.total_episodes_learnt % config.file_logging_frequency_in_episodes == 0 and self.amta.total_episodes_learnt > 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
                     self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
-                        self.amta.save_model(avg_performance, harmonic_performance)
+                        self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                     self.amta.flush_tbw()
                     if avg_performance > self.best_avg_performance:
                         self.best_avg_performance = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                episode_scores = self.amta.train_for_one_episode(self.tasks[j])
-                self.s[j].append(np.mean(episode_scores))
-                if len(self.s[j]) > 1:
-                    self.s[j].pop(0)
+                max_episode_timesteps = int(1.2 * self.performance_logger.worst_performing_task_timestep)
+                episode_score = self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps=max_episode_timesteps)
+                self.s[j].append(episode_score)
 
     def __EA4C_init(self, meta_decider, lambda_):
         self.l = len(self.tasks) // 2
@@ -112,22 +121,21 @@ class MultiTaskLearning:
 
     def __EA4C_train(self):
         with SetVerbosity(self.verbose):
-            episode_learn = 0
+            episodes_learnt = 0
             action = j = 0
             value = np.array([0])
             while 1:
-                ep_scores, train_steps = self.amta.train_for_one_episode(self.tasks[j])
+                max_episode_timesteps = int(1.2 * self.performance_logger.worst_performing_task_timestep)
+                ep_score, train_steps = self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps)
                 self.training_episodes[j] = self.training_episodes[j] + 1
-                episode_learn += 1
-                self.s[j].append(np.mean(ep_scores))
-                if len(self.s[j]) > self.n:
-                    self.s[j].pop(0)
+                episodes_learnt += 1
+                self.s[j].append(ep_score)
                 for i in range(len(self.a)):
                     self.a[i] = sum(self.s[i]) / len(self.s[i])
-                if episode_learn % config.file_logging_frequency_in_episodes == 0 and episode_learn > 0:
+                if episodes_learnt % config.file_logging_frequency_in_episodes == 0 and episodes_learnt > 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
-                        self.amta.save_model(avg_performance, harmonic_performance)
+                        self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                     self.ma.save_model(self.amta.model.train_step)
                     self.amta.flush_tbw()
                     if avg_performance > self.best_avg_performance:
@@ -145,12 +153,9 @@ class MultiTaskLearning:
                                                         self.p, one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
                 action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
 
-            # self.amta.save_model(avg_performance, harmonic_performance)
-            # self.ma.save_model(self.amta.model.train_step)
-            # self.amta.exit_tbw()
-
     def train(self):
         if self.algorithm == "A5C":
             self.__A5C_train()
         elif self.algorithm == "EA4C":
             self.__EA4C_train()
+

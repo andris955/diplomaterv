@@ -6,11 +6,10 @@ import os
 import sys
 import gym
 
-from MultiTaskPolicy import MultiTaskActorCriticPolicy, MultiTaskLSTMA2CPolicy, get_policy_from_string
+from MultiTaskPolicy import MultiTaskActorCriticPolicy, get_policy_from_string
 from MultiTaskRunner import MultiTaskA2CRunner
 from EpisodeRewardCalculator import EpisodeRewardCalculator
 
-from stable_baselines.common.policies import LstmPolicy
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common import set_global_seeds
@@ -105,9 +104,6 @@ class BaseMultitaskRLModel(ABC):
             assert isinstance(env, VecEnv), \
                 "Error: the environment passed is not a vectorized environment, however {} requires it".format(
                     self.__class__.__name__)
-            assert not issubclass(self.policy, LstmPolicy) or self.n_envs_per_task == env.num_envs, \
-                "Error: the environment passed must have the same number of environments as the model was trained on." \
-                "This is due to the Lstm policy not being capable of changing the number of environments."
             self.n_envs_per_task = env.num_envs
 
         self.env_dict = env_dict
@@ -189,7 +185,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         super(ActorCriticMultitaskRLModel, self).__init__(policy, env_dict)
 
         self.sess = None
-        self.initial_state = None
+        self.step_model = None
         self.step = None
         self.trainable_variables = None
 
@@ -206,7 +202,10 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             raise ValueError("Error model was not trained on the game that you are trying to predict on!")
 
         if state is None:
-            state = self.initial_state
+            if self.step_model.n_lstm is not None:
+                state = np.zeros((self.n_envs_per_task, 2*self.step_model.n_lstm))
+            else:
+                state = None
         if mask is None:
             mask = [False for _ in range(self.n_envs_per_task)]
 
@@ -214,22 +213,24 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         vectorized_env = env_utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)
 
-        zero_completed_obs = None
-        if self.policy_name == "lstm" and (observation.shape[0] != self.n_envs_per_task or not vectorized_env):
-            zero_completed_obs = np.zeros((self.n_envs_per_task,) + self.env_dict[task].observation_space.shape)
-            zero_completed_obs[0, :] = observation
-            observation = zero_completed_obs
-        elif not vectorized_env:
-            observation = np.zeros((1,) + observation.shape)
+        # zero_completed_obs = None
+        # if self.policy_name == "lstm" and (observation.shape[0] != self.n_envs_per_task or not vectorized_env):
+        #     zero_completed_obs = np.zeros((self.n_envs_per_task,) + self.env_dict[task].observation_space.shape)
+        #     zero_completed_obs[0, :] = observation
+        #     observation = zero_completed_obs
+        # elif not vectorized_env:
+        #     observation = np.zeros((1,) + observation.shape)
+
+        observation = np.zeros((1,) + observation.shape)
 
         actions, value, state, neglogp = self.step(task, observation, state, mask, deterministic=deterministic)
 
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            actions = actions[0]
-        elif zero_completed_obs is not None:
-            actions = [actions[0]]
+            actions = actions[0] # TODO?
+        # elif zero_completed_obs is not None:
+        #     actions = [actions[0]]
 
         return actions, state
 
@@ -374,17 +375,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         with self.graph.as_default():
             self.sess = tf_utils.make_session(graph=self.graph)
 
-            n_batch_step = None
-            if issubclass(self.policy, MultiTaskLSTMA2CPolicy):
-                n_batch_step = self.n_envs_per_task
-
             step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                     n_batch=n_batch_step, reuse=False)
+                                     reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = step_model.step
             self.value = step_model.value
-            self.initial_state = step_model.initial_state
 
     def setup_train_model(self, transfer=False):
         with SetVerbosity(self.verbose):
@@ -398,18 +394,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                 self.n_batch = self.n_envs_per_task * self.n_steps
 
-                n_batch_step = None
-                n_batch_train = None
-                if issubclass(self.policy, MultiTaskLSTMA2CPolicy):
-                    n_batch_step = self.n_envs_per_task
-                    n_batch_train = self.n_envs_per_task * self.n_steps
-
                 step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                         n_batch=n_batch_step, reuse=False)
+                                         reuse=False)
 
                 with tf.variable_scope("train_model", reuse=True, custom_getter=tf_utils.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task,
-                                              self.n_steps, n_batch_train, reuse=True)
+                                              self.n_steps, reuse=True)
 
                 with tf.variable_scope("loss", reuse=False):
                     self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
@@ -449,7 +439,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 self.step_model = step_model
                 self.step = step_model.step
                 self.value = step_model.value
-                self.initial_state = step_model.initial_state
 
                 self.trainable_variables = tf_utils.find_trainable_variables("model")
 

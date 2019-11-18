@@ -72,56 +72,9 @@ def linear_schedule(progress):
     """
     return 1 - progress
 
-
-def middle_drop(progress):
-    """
-    Returns a linear value with a drop near the middle to a constant value for the Scheduler
-
-    :param progress: (float) Current progress status (in [0, 1])
-    :return: (float) 1 - progress if (1 - progress) >= 0.75 else 0.075
-    """
-    eps = 0.75
-    if 1 - progress < eps:
-        return eps * 0.1
-    return 1 - progress
-
-
-def double_linear_con(progress):
-    """
-    Returns a linear value (x2) with a flattened tail for the Scheduler
-
-    :param progress: (float) Current progress status (in [0, 1])
-    :return: (float) 1 - progress*2 if (1 - progress*2) >= 0.125 else 0.125
-    """
-    progress *= 2
-    eps = 0.125
-    if 1 - progress < eps:
-        return eps
-    return 1 - progress
-
-
-def double_middle_drop(progress):
-    """
-    Returns a linear value with two drops near the middle to a constant value for the Scheduler
-
-    :param progress: (float) Current progress status (in [0, 1])
-    :return: (float) if 0.75 <= 1 - p: 1 - p, if 0.25 <= 1 - p < 0.75: 0.75, if 1 - p < 0.25: 0.125
-    """
-    eps1 = 0.75
-    eps2 = 0.25
-    if 1 - progress < eps1:
-        if 1 - progress < eps2:
-            return eps2 * 0.5
-        return eps1 * 0.1
-    return 1 - progress
-
-
 SCHEDULES = {
     'linear': linear_schedule,
     'constant': constant,
-    'double_linear_con': double_linear_con,
-    'middle_drop': middle_drop,
-    'double_middle_drop': double_middle_drop
 }
 
 

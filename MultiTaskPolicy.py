@@ -3,9 +3,11 @@ from abc import ABC
 import numpy as np
 import tensorflow as tf
 from gym.spaces import Discrete
-from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm
+from stable_baselines.a2c.utils import conv, linear, conv_to_fc, seq_to_batch, lstm
 from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution
 from tf_utils import observation_input
+
+from policy_utils import batch_to_seq
 
 
 def shared_network(scaled_images):
@@ -54,16 +56,12 @@ class BaseMultiTaskPolicy(ABC):
     """
 
     def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
-                 n_envs_per_task: int, n_steps: int, n_batch: int, reuse=False):
+                 n_envs_per_task: int, n_steps: int, reuse=False):
         self.n_envs_per_task = n_envs_per_task
         self.tasks = tasks
         self.n_steps = n_steps
         with tf.variable_scope("input", reuse=False):
-            self.obs_ph, self.processed_obs = observation_input(list(ob_spaces.values()), n_batch)
-        if n_batch is None:
-            self.n_batch = self.n_envs_per_task * self.n_steps
-        else:
-            self.n_batch = n_batch
+            self.obs_ph, self.processed_obs = observation_input(list(ob_spaces.values()))
         self.sess = sess
         self.reuse = reuse
         self.ac_space_dict = ac_space_dict
@@ -108,8 +106,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     """
 
     def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
-                 n_envs_per_task: int, n_steps: int, n_batch: int, reuse=False):
-        super(MultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=reuse)
+                 n_envs_per_task: int, n_steps: int, reuse=False):
+        super(MultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
         for task in self.tasks:
@@ -120,7 +118,7 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         self.value_fn_dict = {}
         self.q_value_dict = {}
         self.deterministic_action = None
-        self.initial_state = None
+        self.n_lstm = None
 
     def _setup_init(self):
         """
@@ -182,8 +180,8 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
 
 class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
-    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=False, feature_extractor=shared_network):
-        super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse=reuse)
+    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False, feature_extractor=shared_network):
+        super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
             self.pi_latent = vf_latent = feature_extractor(self.processed_obs)
@@ -195,8 +193,6 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
                 self.proba_distribution_dict[task] = proba_distribution # distribution lehet vele sample neglog entropy a policy layeren
                 self.policy_dict[task] = policy # egy linear layer
                 self.q_value_dict[task] = q_value # linear layer
-
-        self.initial_state = None
 
         self._setup_init()
 
@@ -233,19 +229,19 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
     :param layer_norm: (bool) Whether or not to use layer normalizing LSTMs
     """
 
-    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, n_lstm=256, reuse=False,
+    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_lstm=256, reuse=False,
                  feature_extractor=shared_network, layer_norm=True):
-        super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_batch, reuse)
-
+        super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
+        self.n_lstm = n_lstm
         with tf.variable_scope("input", reuse=True):
-            self.masks_ph = tf.placeholder(tf.float32, [n_batch], name="masks_ph")  # mask (done t-1)
+            self.masks_ph = tf.placeholder(tf.float32, [None], name="masks_ph")  # mask (done t-1)
             # n_lstm * 2 dim because of the cell and hidden states of the LSTM
-            self.states_ph = tf.placeholder(tf.float32, [self.n_envs_per_task, n_lstm * 2], name="states_ph")  # states
+            self.states_ph = tf.placeholder(tf.float32, [None, n_lstm * 2], name="states_ph")  # states
 
         with tf.variable_scope("shared_model", reuse=reuse):
             extracted_features = feature_extractor(self.processed_obs)
-            input_sequence = batch_to_seq(extracted_features, self.n_envs_per_task, self.n_steps) # n_steps x [n_env x feature extractore output shape]
-            masks = batch_to_seq(self.masks_ph, self.n_envs_per_task, self.n_steps) # n_steps x [n_env x 1]
+            input_sequence = batch_to_seq(extracted_features, self.n_steps) # n_steps x [n_env x feature extractor output shape]
+            masks = batch_to_seq(self.masks_ph, self.n_steps) # n_steps x [n_env x 1]
             rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
             latent_vector = seq_to_batch(rnn_output) # (n_steps * n_envs) x n_lstm
 
@@ -258,7 +254,6 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
                 self.policy_dict[task] = policy  # egy linear layer
                 self.q_value_dict[task] = q_value  # linear layer
 
-        self.initial_state = np.zeros((self.n_envs_per_task, n_lstm * 2), dtype=np.float32)
         self._setup_init()
 
     def step(self, task, obs, state=None, mask=None, deterministic=False):

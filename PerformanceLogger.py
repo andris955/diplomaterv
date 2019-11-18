@@ -9,8 +9,10 @@ from utils import CustomMessengerClass
 
 class PerformanceLogger:
     def __init__(self, tasks: list, model_id: str, envs_for_test: dict, ta: dict):
+        tasks_score = [task + "_score" for task in tasks]
         tasks_performance = [task + "_performance" for task in tasks]
-        log_values = "elapsed_time timestep " + " ".join(tasks_performance)
+        interleaved_task_logvalues = [val for pair in zip(tasks_score, tasks_performance) for val in pair]
+        log_values = "elapsed_time timestep " + " ".join(interleaved_task_logvalues)
         self.log_value_list = log_values.split(" ")
         self.tasks = tasks
         self.ta = ta
@@ -39,8 +41,12 @@ class PerformanceLogger:
             elif field == "timestep":
                 update_dict[field] = timestep
             else:
-                task_name = field.split('_')[0]
-                update_dict[field] = self.scores[self.tasks.index(task_name)]/self.ta[task_name]
+                task_name, field_type = field.split('_')
+                if field_type == 'performance':
+                    update_dict[field] = self.scores[self.tasks.index(task_name)]/self.ta[task_name]
+                elif field_type == 'score':
+                    update_dict[field] = self.scores[self.tasks.index(task_name)]
+
         self.logobject.__dict__.update(update_dict)
         self.logger.log(self.name, self.logobject)
 

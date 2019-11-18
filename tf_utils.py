@@ -10,14 +10,14 @@ from stable_baselines import logger
 
 
 def observation_input(ob_spaces, batch_size=None):
-    for ob_space in ob_spaces:
-        if isinstance(ob_space, Box):
-            continue
-        else:
+    for i, ob_space in enumerate(ob_spaces):
+        if not isinstance(ob_space, Box):
             raise ValueError("All observation space must be a box!")
-    observation_ph = tf.placeholder(shape=(batch_size, None, None, None), dtype=ob_spaces[0].dtype, name='Ob')
+        if ob_space.shape != ob_spaces[i-1].shape:
+            raise ValueError("All observation space's shape must be equal!")
+    observation_ph = tf.placeholder(shape=(batch_size, ) + ob_spaces[0].shape, dtype=ob_spaces[0].dtype, name='Ob')
     processed_observations = tf.cast(observation_ph, tf.float32)
-    processed_observations = tf.image.resize(processed_observations, (210, 160))
+    # processed_observations = tf.image.resize(processed_observations, (210, 160))
     # rescale to [1, 0] if the bounds are defined
     if (not np.any(np.isinf(ob_spaces[0].low)) and not np.any(np.isinf(ob_spaces[0].high)) and
        np.any((ob_spaces[0].high - ob_spaces[0].low) != 0)):

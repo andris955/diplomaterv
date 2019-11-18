@@ -22,6 +22,7 @@ from stable_baselines.common import explained_variance, SetVerbosity
 from stable_baselines.a2c.utils import mse
 from TensorboardWriter import TensorboardWriter
 
+import env_utils
 import utils
 import tf_utils
 import config
@@ -211,7 +212,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         observation = np.array(observation)
 
-        vectorized_env = utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)
+        vectorized_env = env_utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)
 
         zero_completed_obs = None
         if self.policy_name == "lstm" and (observation.shape[0] != self.n_envs_per_task or not vectorized_env):
@@ -349,8 +350,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         if _init_setup_model:
             self.setup_train_model()
 
-    def _setup_multitask_learn(self, model_name: str, seed=3):
-        self._setup_learn(seed)
+    def _setup_multitask_learn(self, model_name: str):
+        self._setup_learn(config.seed)
         if self.max_scheduler_timesteps is None:
             self.max_scheduler_timesteps = config.max_timesteps
         self.learning_rate_schedule = utils.Scheduler(initial_value=self.initial_learning_rate, n_values=self.max_scheduler_timesteps,
@@ -482,7 +483,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         assert cur_lr is not None, "Error: the observation input array cannot be empty!"
 
         if writer is not None and (self.num_timesteps % 1000 == 0):
-            tf_utils.tensorboard_logger(task, rewards, advs, writer, self.num_timesteps, obs=None)
+            tf_utils.tensorboard_logger(task, rewards, advs, writer, self.num_timesteps)
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
@@ -566,8 +567,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         full_episode = True in mask
         print("Game over: {}".format(full_episode))
 
-
-        return episode_score, policy_loss, value_loss, episode_training_updates, full_episode
+        return episode_score, policy_loss, value_loss, episode_training_updates
 
     def save(self, save_path: str, id: str, json_params: dict):
         params = {

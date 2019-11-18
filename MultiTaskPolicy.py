@@ -28,7 +28,7 @@ def shared_network(scaled_images):
     return activ(linear(layer_4, 'fc2', n_hidden=256, init_scale=np.sqrt(2))) #512
 
 
-def get_policy_from_string(policy):
+def get_policy_from_string(policy: str):
     if policy == "lstm":
         return MultiTaskLSTMA2CPolicy
     elif policy == "ff":

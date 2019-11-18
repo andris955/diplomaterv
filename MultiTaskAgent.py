@@ -2,8 +2,7 @@ import config
 from Logger import Logger
 
 import gym
-from stable_baselines.common.vec_env import SubprocVecEnv
-from stable_baselines.common.vec_env import DummyVecEnv
+from env_utils import make_atari_env
 from MultiTaskA2C import MultitaskA2C
 from MultiTaskRunner import MultiTaskA2CRunner
 
@@ -14,13 +13,15 @@ import numpy as np
 
 
 class MultiTaskAgent:
-    def __init__(self, model_id: str, policy: str, tasks: list, n_steps: int, n_cpus: int, tensorboard_logging, logging):
+    def __init__(self, model_id: str, policy: str, tasks: list, n_steps: int, n_cpus: int, tensorboard_logging, logging, env_kwargs):
         self.model_id = model_id
         self.policy = policy
         self.tasks = tasks
         self.n_steps = n_steps
         self.n_cpus = n_cpus
         self.sub_proc_environments = {}
+        self.runners = {}
+        self.env_kwargs = env_kwargs
         self.logging = logging
         if tensorboard_logging:
             self.tb_log = config.tensorboard_log
@@ -69,7 +70,15 @@ class MultiTaskAgent:
 
     def __setup_environments(self):
         for task in self.tasks:
-            env = SubprocVecEnv([lambda: gym.make(task) for _ in range(self.n_cpus)])
+            env = make_atari_env(task, self.n_cpus, config.seed, wrapper_kwargs=self.env_kwargs)
+            # env.reset()
+            # for _ in range(1):
+            #     import matplotlib.pyplot as plt
+            #     actions = [env.action_space.sample()]*self.n_cpus
+            #     obs,_,_,_ = env.step(actions)
+            #     env.render()
+            #     plt.imshow(obs[0,:,:,0])
+            #     plt.show()
             assert isinstance(env.action_space, gym.spaces.Discrete), "Error: all the input games must have Discrete action space"
             self.sub_proc_environments[task] = env
 
@@ -86,14 +95,13 @@ class MultiTaskAgent:
             self.writer = self.tbw.writer
 
     def __setup_runners(self):
-        self.runners = {}
         for task in self.tasks:
             self.runners[task] = MultiTaskA2CRunner(task, self.sub_proc_environments[task],
                                                     self.model, n_steps=self.n_steps, gamma=0.99)
 
     def train_for_one_episode(self, task: str, max_episode_timesteps: int):
         runner = self.runners[task]
-        episode_score, policy_loss, value_loss, episodes_training_updates, full_episode = \
+        episode_score, policy_loss, value_loss, episodes_training_updates = \
             self.model.multi_task_learn_for_one_episode(task, runner, max_episode_timesteps, self.writer)
         self.total_timesteps = self.model.num_timesteps
         if self.logging:
@@ -107,8 +115,8 @@ class MultiTaskAgent:
                                       total_episodes_learnt=self.total_episodes_learnt,
                                       episodes_learnt=self.episodes_learnt[task],
                                       training_updates=self.training_updates[task],
-                                      relative_performance=np.around(episode_score / config.target_performances[task], 2),
-                                      score=np.around(episode_score, 2),
+                                      # relative_performance=np.around(episode_score / config.target_performances[task], 2),
+                                      # score=np.around(episode_score, 2),
                                       policy_loss=np.around(policy_loss, 2),
                                       value_loss=np.around(value_loss, 2))
             self.logger.log(task, log_value)
@@ -122,7 +130,7 @@ class MultiTaskAgent:
     def _play_n_game(model, task: str, n_games: int, display=False, env=None):
         sum_reward = 0
         if env is None:
-            env = DummyVecEnv([lambda: gym.make(task)])
+            env = make_atari_env(task, 1, config.seed)
         obs = env.reset()
         done = False
         state = None
@@ -164,7 +172,6 @@ class MultiTaskAgent:
             self.model.save(base_path, id)
         except:
             print("Error saving the MultiTaskA2C model")
-
 
     def exit_tbw(self):
         if self.tbw is not None:

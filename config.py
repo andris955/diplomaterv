@@ -52,6 +52,7 @@ uniform_policy_steps = 100_000  # Number of time steps for which a uniformly ran
 max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe.
 tau = 1
 n_steps = 10
+seed = 3
 
 stdout_logging_frequency_in_train_steps = 100
 file_logging_frequency_in_episodes = 5  # number of episodes

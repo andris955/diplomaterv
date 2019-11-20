@@ -1,11 +1,10 @@
 import numpy as np
-from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.a2c.utils import discount_with_dones
 from stable_baselines.common.vec_env import VecEnv
 import gym
 
 
-class MultiTaskA2CRunner(AbstractEnvRunner):
+class MultiTaskA2CRunner():
     def __init__(self, env_name: str, env: VecEnv, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
@@ -15,8 +14,17 @@ class MultiTaskA2CRunner(AbstractEnvRunner):
         :param n_steps: (int) The number of steps to run for each environment
         :param gamma: (float) Discount factor
         """
-        super(MultiTaskA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
+        self.env = env
+        self.model = model
+        n_env = env.num_envs
+        self.batch_ob_shape = (n_env*n_steps,) + env.observation_space.shape
+        self.obs = np.zeros((n_env,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
+        self.obs[:] = env.reset()
+        self.n_steps = n_steps
+        self.dones = [False for _ in range(n_env)]
+
         self.gamma = gamma
+        self.states = np.zeros((n_env, self.model.step_model.n_lstm*2), dtype=np.float32)
         self.env_name = env_name
 
     def run(self):

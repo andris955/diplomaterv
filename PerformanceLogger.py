@@ -55,7 +55,7 @@ class PerformanceLogger:
 
     def performance_test(self, n_games: int, amta, ta: dict):
         for i, task in enumerate(self.tasks):
-            self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, self.envs_for_test[task])
+            self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, env=self.envs_for_test[task])
             self.performance[i] = min(self.scores[i] / ta[task], 1)
         self.worst_performing_task_timestep = self.timesteps[self.performance.argmin()]
         avg_performance = np.around(np.mean(self.performance), 2)

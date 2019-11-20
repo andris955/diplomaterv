@@ -145,6 +145,8 @@ class MultiTaskAgent:
                 if display is True:
                     env.render()
         sum_reward = sum_reward / n_games
+        if sum_reward == 0:  # harmonic mean needs greater than zero elements
+            sum_reward = 0.1
         timesteps = timesteps / n_games
         env.close()
         return sum_reward, timesteps

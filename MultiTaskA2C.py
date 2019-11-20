@@ -210,18 +210,9 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             mask = [False for _ in range(self.n_envs_per_task)]
 
         observation = np.array(observation)
-
         vectorized_env = env_utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)
-
-        # zero_completed_obs = None
-        # if self.policy_name == "lstm" and (observation.shape[0] != self.n_envs_per_task or not vectorized_env):
-        #     zero_completed_obs = np.zeros((self.n_envs_per_task,) + self.env_dict[task].observation_space.shape)
-        #     zero_completed_obs[0, :] = observation
-        #     observation = zero_completed_obs
-        # elif not vectorized_env:
-        #     observation = np.zeros((1,) + observation.shape)
-
-        observation = np.zeros((1,) + observation.shape)
+        if not vectorized_env:
+            observation = np.zeros((1,) + observation.shape)
 
         actions, value, state, neglogp = self.step(task, observation, state, mask, deterministic=deterministic)
 
@@ -229,8 +220,6 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
             actions = actions[0] # TODO?
-        # elif zero_completed_obs is not None:
-        #     actions = [actions[0]]
 
         return actions, state
 

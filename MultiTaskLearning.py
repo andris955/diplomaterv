@@ -49,7 +49,7 @@ class MultiTaskLearning:
         env_kwargs = {
             'episode_life': True,
             'clip_rewards': False,
-            'frame_stack': True,
+            'frame_stack': policy != "lstm",
             'scale': False,
         }
 

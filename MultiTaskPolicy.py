@@ -47,11 +47,9 @@ class BaseMultiTaskPolicy(ABC):
     :param tasks: [str] Name of tasks
     :param ob_spaces: (Gym Space) The observation space of the environment
     :param ac_space_dict: (Dict of Gym Space) The action space of the environment
-    :param n_envs_per_tasks: (int) The number of environments to run
+    :param n_envs_per_task: (int) The number of environments to run
     :param n_steps: (int) The number of steps to run for each environment
     :param reuse: (bool) If the policy is reusable or not
-    :param scale: (bool) whether or not to scale the input
-    :param obs_phs: (TensorFlow Tensor, TensorFlow Tensor) a tuple containing an override for observation placeholder
         and the processed observation placeholder respectivly
     """
 
@@ -219,7 +217,6 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
     :param ac_space_dict: (Gym Space) The action space of the environment
     :param n_envs_per_task: (int) The number of environments to run
     :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param n_lstm: (int) The number of LSTM cells (for recurrent policies)
     :param reuse: (bool) If the policy is reusable or not
         format described in mlp_extractor but with additional support for a 'lstm' entry in the shared network part.
@@ -257,10 +254,10 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
     def step(self, task, obs, state=None, mask=None, deterministic=False):
         if deterministic:
             action, value, state, neglogp = self.sess.run([self.deterministic_action[task], self._value[task], self.state_new, self.neglogp[task]],
-                                 {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
+                                                          {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
         else:
             action, value, state, neglogp = self.sess.run([self.action[task], self._value[task], self.state_new, self.neglogp[task]],
-                                 {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
+                                                          {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
 
         return action, value, state, neglogp
 

@@ -12,7 +12,10 @@ MTI6 = ['Atlantis-v0', 'Amidar-v0', 'Breakout-v0', 'Bowling-v0', 'BeamRider-v0',
 
 MTI7 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0', 'Amidar-v0', 'ChopperCommand-v0', 'Breakout-v0', 'BeamRider-v0', 'Bowling-v0', 'Centipede-v0', 'Krull-v0', 'Kangaroo-v0', 'Phoenix-v0']
 
-MTIC = ['Breakout-v0', 'Seaquest-v0']
+MTIC1 = ['SpaceInvaders-v0', 'Seaquest-v0']  # különböző, de jó
+
+MTIC2 = ['SpaceInvaders-v0', 'StarGunner-v0', 'DemonAttack-v0']  # hasonló, de rossz
+
 
 target_performances = {
     'SpaceInvaders-v0': 1200,
@@ -65,3 +68,17 @@ meta_lambda = 0.5
 tensorboard_log = "./data/tb_logs/"
 model_path = "./data/models/"
 log_path = "./data/logs/"
+
+# if __name__ == '__main__':
+#     import gym
+#     import time
+#     for game in MTIC1:
+#         print(game)
+#         env = gym.make(game)
+#         env.reset()
+#         for _ in range(1000):
+#             action = env.action_space.sample()
+#             env.step(action)
+#             env.render()
+#             time.sleep(0.05)
+#     print("ok")

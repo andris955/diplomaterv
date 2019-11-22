@@ -55,6 +55,7 @@ class MultiTaskLearning:
 
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging, env_kwargs=env_kwargs)
 
+        env_kwargs['episode_life'] = False
         env_for_test = {}
         for task in self.tasks:
             env_for_test[task] = make_atari_env(task, 1, config.seed, wrapper_kwargs=env_kwargs)

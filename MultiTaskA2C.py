@@ -219,7 +219,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            actions = actions[0] # TODO?
+            actions = actions[0]  # TODO?
 
         return actions, state
 
@@ -449,7 +449,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         :param masks: ([bool]) Whether or not the episode is over (used for recurrent policies)
         :param actions: ([float]) The actions taken
         :param values: ([float]) The logits values
-        :param update: (int) the current step iteration
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: (float, float, float) policy loss, value loss, policy entropy
         """

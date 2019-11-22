@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import config
 import sys
-from utils import CustomMessengerClass
 
 
 class Logger:
@@ -84,7 +83,4 @@ class Logger:
                     self.pd_data[task].to_csv(f, sep=";", index=False)
         self.__pd_data_init()
 
-if __name__ == '__main__':
-    logger = Logger("A5C_19_11_01_23_19", config.MTI1)
-    _, _ = logger.init_train_data()
 

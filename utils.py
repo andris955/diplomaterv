@@ -72,6 +72,7 @@ def linear_schedule(progress):
     """
     return 1 - progress
 
+
 SCHEDULES = {
     'linear': linear_schedule,
     'constant': constant,

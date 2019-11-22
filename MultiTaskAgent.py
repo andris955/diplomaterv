@@ -71,14 +71,6 @@ class MultiTaskAgent:
     def __setup_environments(self):
         for task in self.tasks:
             env = make_atari_env(task, self.n_cpus, config.seed, wrapper_kwargs=self.env_kwargs)
-            # env.reset()
-            # for _ in range(1):
-            #     import matplotlib.pyplot as plt
-            #     actions = [env.action_space.sample()]*self.n_cpus
-            #     obs,_,_,_ = env.step(actions)
-            #     env.render()
-            #     plt.imshow(obs[0,:,:,0])
-            #     plt.show()
             assert isinstance(env.action_space, gym.spaces.Discrete), "Error: all the input games must have Discrete action space"
             self.sub_proc_environments[task] = env
 

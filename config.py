@@ -1,10 +1,10 @@
-MTI1 = ['SpaceInvaders-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'DemonAttack-v0', 'StarGunner-v0'] # disc, obs jó
+MTI1 = ['SpaceInvaders-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'DemonAttack-v0', 'StarGunner-v0']  # disc, obs jó
 #actionspace disc 6             disc 9              disc 18         disc 6          disc 18
-MTI2 = ["Asterix-v0", "Alien-v0", "Assault-v0", "TimePilot-v0", "Gopher-v0", "ChopperCommand-v0"] #disc, változó obs méret
+MTI2 = ["Asterix-v0", "Alien-v0", "Assault-v0", "TimePilot-v0", "Gopher-v0", "ChopperCommand-v0"]  # disc, változó obs méret
 
-MTI3 = ['Breakout-v0', 'Centipede-v0', 'Frostbite-v0', 'Qbert-v0', 'KungFuMaster-v0', 'WizardOfWor-v0'] # disc, observation nem jó változik, de csak a méret
+MTI3 = ['Breakout-v0', 'Centipede-v0', 'Frostbite-v0', 'Qbert-v0', 'KungFuMaster-v0', 'WizardOfWor-v0']  # disc, observation nem jó változik, de csak a méret
 
-MTI4 = ['Atlantis-v0', 'Breakout-v0', 'Bowling-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'SpaceInvaders-v0', 'Pong-v0', 'Enduro-v0'] # disc, observation jo
+MTI4 = ['Atlantis-v0', 'Breakout-v0', 'Bowling-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'SpaceInvaders-v0', 'Pong-v0', 'Enduro-v0']  # disc, observation jo
 
 MTI5 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0']
 
@@ -12,9 +12,11 @@ MTI6 = ['Atlantis-v0', 'Amidar-v0', 'Breakout-v0', 'Bowling-v0', 'BeamRider-v0',
 
 MTI7 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0', 'Amidar-v0', 'ChopperCommand-v0', 'Breakout-v0', 'BeamRider-v0', 'Bowling-v0', 'Centipede-v0', 'Krull-v0', 'Kangaroo-v0', 'Phoenix-v0']
 
-MTIC1 = ['SpaceInvaders-v0', 'Seaquest-v0']  # különböző, de jó
+MTIC1 = ['SpaceInvaders-v0', 'Seaquest-v0', 'CrazyClimber-v0']  # különböző, de jó
 
-MTIC2 = ['SpaceInvaders-v0', 'StarGunner-v0', 'DemonAttack-v0']  # hasonló, de rossz
+MTIC2 = ['SpaceInvaders-v0', 'Assault-v0', 'DemonAttack-v0']  # hasonló (1D-ben mozog és lő), de rossz
+
+MTIC3 = ['Seaquest-v0', 'StarGunner-v0', 'ChopperCommand-v0']  # hasonló (2D-ben mozog és lő)
 
 
 target_performances = {
@@ -72,11 +74,11 @@ log_path = "./data/logs/"
 # if __name__ == '__main__':
 #     import gym
 #     import time
-#     for game in MTIC1:
+#     for game in MTIC2:
 #         print(game)
 #         env = gym.make(game)
 #         env.reset()
-#         for _ in range(1000):
+#         for _ in range(150):
 #             action = env.action_space.sample()
 #             env.step(action)
 #             env.render()

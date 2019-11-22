@@ -8,6 +8,7 @@ from MetaAgent import MetaAgent
 import utils
 import datetime
 from PerformanceLogger import PerformanceLogger
+import copy
 
 
 class MultiTaskLearning:
@@ -72,7 +73,7 @@ class MultiTaskLearning:
             "best_avg_performance": self.best_avg_performance,
             "best_harmonic_performance": self.best_harmonic_performance,
         })
-        self.json_params.update({"env_kwargs": env_kwargs})
+        self.json_params.update({"env_kwargs": copy.deepcopy(env_kwargs)})
 
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging, env_kwargs=env_kwargs)
 

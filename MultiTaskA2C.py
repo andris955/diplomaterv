@@ -248,10 +248,11 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         tasks = params["tasks"]
 
         if transfer:
-            model.setup_train_model(transfer=True)
-            tasks_to_set = [key for key in envs_to_set.keys()]
+            tasks_to_set = list(envs_to_set.keys())
             if tasks == tasks_to_set:
                 model.set_envs(envs_to_set, tasks)
+                model.setup_train_model(transfer=True)
+
             else:
                 print("The envs passed as argument is not corresponding to the envs that the model "
                       "is trained on.\n Trained on: {} \n Passed: {}".format(tasks, tasks_to_set))

@@ -79,7 +79,7 @@ class MultiTaskAgent:
             self.model = MultitaskA2C(self.policy, self.sub_proc_environments, tensorboard_log=self.tb_log,
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=self.n_steps)
         else:
-            self.model, _ = MultitaskA2C.load(self.model_id, self.n_cpus, envs_to_set=self.sub_proc_environments, transfer=True,
+            self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.sub_proc_environments, transfer=True,
                                               total_train_steps=self.total_training_updates, num_timesteps=self.total_timesteps)
 
         self.tbw = self.model._setup_multitask_learn(self.model_id)

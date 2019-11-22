@@ -43,7 +43,5 @@ def main(algorithm: str, selected_mti: list, policy: str, n_cpus: int, selected_
 
 
 if __name__ == '__main__':
-    main(algorithm="EA4C", selected_mti=config.MTIC1, policy="lstm", n_cpus=7,
+    main(algorithm="A5C", selected_mti=config.MTIC1, policy="lstm", n_cpus=cpu_count(),
          selected_gpus="", train=True, tensorboard_logging=False, logging=True, model_id="")
-
-    # TODO a A5C_19_11_22_17_14 model 8 cpun lett tanítva kipróbálni h megy-e a transfer 7 cpun.

@@ -23,7 +23,7 @@ class Logger:
         total_episodes_learnt = 0
         total_timesteps = 0
         total_training_updates = 0
-        files = [file for file in os.listdir(self.folder_path) if file[-4:] == ".csv"]
+        files = [file for file in os.listdir(self.folder_path) if file[-4:] == ".csv" and not file.split('_')[0] == 'Global']
         for file_name in files:
             data = pd.read_csv(os.path.join(self.folder_path, file_name), sep=";")
             return_data[file_name[:-4]] = data.tail(1) # only the last row

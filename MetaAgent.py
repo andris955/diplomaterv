@@ -4,20 +4,26 @@ import os
 import utils
 import config
 from stable_baselines import logger
+from utils import read_params
 
 
 class MetaAgent:
     def __init__(self, model_id: str, n_steps: int, input_len: int, output_len: int):
         self.model_id = model_id
         self.transfer = True if os.path.exists(os.path.join(config.model_path, model_id)) and model_id else False
-        self.input_len = input_len
-        self.output_len = output_len
-        if not self.transfer:
-            self.meta_learner = MetaA2CModel(input_len, output_len, n_steps)
+        if self.transfer:
+            params = read_params(model_id, "meta")
+            self.input_len = params['input_length']
+            self.output_len = params['output_length']
+            self.n_steps = params['n_steps']
+            self.meta_learner = MetaA2CModel.load(self.model_id, self.input_len, self.output_len)
         else:
-            self.meta_learner = MetaA2CModel.load(model_id, input_len, output_len)
+            self.input_len = input_len
+            self.output_len = output_len
+            self.n_steps = n_steps
+            self.meta_learner = MetaA2CModel(self.input_len, self.output_len, self.n_steps)
 
-        self.inputs = [np.zeros(self.input_len)] * n_steps
+        self.inputs = [np.zeros(self.input_len)] * self.n_steps
         self.train_step = 0
 
     def sample(self, game_input):

@@ -157,7 +157,7 @@ def _load_model_from_file(load_path, model):
 
 
 def read_params(model_id, model):
-    if model != "multitask" or model != "meta":
+    if model != "multitask" and model != "meta":
         raise ValueError("model must be either str(multitask) or str(meta)")
     with open(os.path.join(os.path.join(config.model_path, model_id), model + '_params.json'), "r") as file:
         params = json.load(file)

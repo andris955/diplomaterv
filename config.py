@@ -58,6 +58,7 @@ max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikk
 tau = 1
 n_steps = 10
 seed = 3
+timestep_coeff = 1.2
 
 stdout_logging_frequency_in_train_steps = 100
 file_logging_frequency_in_episodes = 10  # number of episodes

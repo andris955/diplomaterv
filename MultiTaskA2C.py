@@ -4,7 +4,7 @@ import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
 import sys
-import gym
+from utils import read_params
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy, get_policy_from_string
 from MultiTaskRunner import MultiTaskA2CRunner
@@ -78,7 +78,7 @@ class BaseMultitaskRLModel(ABC):
     def set_envs_by_name(self, tasks: list):
         self.env_dict = {}
         for task in tasks:
-            self.env_dict[task] = DummyVecEnv([lambda: gym.make(task)])
+            self.env_dict[task] = DummyVecEnv([lambda: make_atari_env(task)])
 
     def set_envs(self, env_dict, tasks: list):
         """
@@ -234,7 +234,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             if not (total_train_steps or num_timesteps):
                 raise ValueError("If transfer learning is active total_train_steps and num_timesteps must be provided!")
             else:
-                if not (type(total_train_steps, int) or type(num_timesteps, int)):
+                if not (num_timesteps == int(num_timesteps) and total_train_steps == int(total_train_steps)):
                     raise TypeError("total_train_steps and num_timesteps must be integers")
 
         load_path = os.path.join(config.model_path, model_id)
@@ -398,7 +398,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
                     neglogpac = {}
                     losses = {}
-                    for task in self.env_dict.keys():
+                    for task in self.tasks:
                         neglogpac[task] = train_model.proba_distribution_dict[task].neglogp(self.actions_ph)
                         self.entropy[task] = tf.reduce_mean(train_model.proba_distribution_dict[task].entropy())
                         self.pg_loss[task] = tf.reduce_mean(self.advs_ph * neglogpac[task])  # policy gradient loss
@@ -414,7 +414,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 optimizers = {}
                 grads_and_vars = {}
                 self.apply_backprop = {}
-                for task in self.env_dict.keys():
+                for task in self.tasks:
                     optimizers[task] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
                     grads_and_vars[task] = optimizers[task].compute_gradients(losses[task])
                     if self.max_grad_norm is not None:
@@ -503,12 +503,15 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         print("---------------------------{}---------------------------".format(task))
 
         mask = [False]*self.n_envs_per_task
-        episode_score = 0
+        episode_scores = np.zeros(self.n_envs_per_task)
         policy_loss = value_loss = None
         episode_training_updates = 0
         episode_timesteps = 0
+        all_process_ended = False
+        tmp_scores = np.zeros(self.n_batch)
 
-        while not (True in mask or episode_timesteps >= max_episode_timesteps):
+        print("Max episode timesteps: {}".format(max_episode_timesteps))
+        while not (all_process_ended or episode_timesteps >= max_episode_timesteps):
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.total_train_steps += 1
@@ -520,17 +523,20 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             train_step_per_sec = int(1 / n_seconds)
             tmp_ep_scores = self.episode_reward.get_reward(task, true_rewards.reshape((self.n_envs_per_task, self.n_steps)),
                                                            masks.reshape((self.n_envs_per_task, self.n_steps)), self.total_train_steps)
+            tmp_scores += true_rewards
             masks_reshaped = masks.reshape((self.n_envs_per_task, self.n_steps))
             assert masks_reshaped.shape[0] == self.n_envs_per_task, "dones.shape[0] must be n_envs_per_task"
             for i in range(masks_reshaped.shape[0]):
                 if True in masks_reshaped[i, :]:
                     mask[i] = True
-                    episode_score = tmp_ep_scores[i]
+                    episode_scores[i] = tmp_ep_scores[i]
+            all_process_ended = all(mask)
 
             self.num_timesteps += self.n_batch
+            episode_timesteps += self.n_steps
             episode_training_updates += 1
 
-            if self.verbose >= 1 and ((self.total_train_steps % config.stdout_logging_frequency_in_train_steps == 0) or True in mask):
+            if self.verbose >= 1 and ((self.total_train_steps % config.stdout_logging_frequency_in_train_steps == 0) or all_process_ended):
                 explained_var = explained_variance(values, rewards)
                 logger.record_tabular("training_updates", self.total_train_steps)
                 logger.record_tabular("total_timesteps", self.num_timesteps)
@@ -541,8 +547,14 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 logger.record_tabular("explained_variance", float(explained_var))
                 logger.dump_tabular()
 
-        full_episode = True in mask
-        print("Game over: {}".format(full_episode))
+        print("Any game over: {}".format(any(mask)))
+        print("All game over: {}".format(all_process_ended))
+
+        indexes = np.where(episode_scores > 0)
+        if indexes != np.asarray([]):
+            episode_score = np.mean(episode_scores[indexes])  # only average those that are non zero
+        else:
+            episode_score = np.max(tmp_scores)
 
         return episode_score, policy_loss, value_loss, episode_training_updates
 
@@ -562,7 +574,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "verbose": self.verbose,
             "observation_space_dict": self.observation_space_dict,
             "action_space_dict": self.action_space_dict,
-            "n_envs_per_task": self.n_envs_per_task,
             'tensorboard_log': self.tensorboard_log,
             "full_tensorboard_log": self.full_tensorboard_log,
             "max_scheduler_timesteps": self.max_scheduler_timesteps,

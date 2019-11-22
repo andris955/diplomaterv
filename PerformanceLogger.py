@@ -27,11 +27,11 @@ class PerformanceLogger:
         self.performance = np.zeros(len(self.tasks))
         self.envs_for_test = envs_for_test
         self.logobject = self.logvalue(*self.log_value_list)
-        self.worst_performing_task_timestep = 10000
+        self.worst_performing_task_timestep = 10_000
 
         if self.transfer:
-            _, elapsed_time = self.logger.init_train_data()
-            self.start_time -= elapsed_time
+            return_data, elapsed_time, total_episodes_learnt, total_timesteps, total_training_updates = self.logger.init_train_data()
+            self.start_time -= int(elapsed_time)
 
     def log(self, timestep: int):
         update_dict = {}
@@ -54,10 +54,16 @@ class PerformanceLogger:
         self.logger.dump()
 
     def performance_test(self, n_games: int, amta, ta: dict):
+        min_performance = np.zeros(len(self.tasks))
         for i, task in enumerate(self.tasks):
             self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, env=self.envs_for_test[task])
-            self.performance[i] = min(self.scores[i] / ta[task], 1)
-        self.worst_performing_task_timestep = self.timesteps[self.performance.argmin()]
-        avg_performance = np.around(np.mean(self.performance), 4)
-        harmonic_performance = np.around(hmean(self.performance), 4)
+            self.performance[i] = self.scores[i] / ta[task]
+            min_performance[i] = min(self.scores[i] / ta[task], 1)
+        index = self.performance.argmin()
+        self.worst_performing_task_timestep = self.timesteps[index]
+        print("-----------------------------------------------------------------")
+        print("Worst performing task: {} with {} timestep".format(self.tasks[index], self.worst_performing_task_timestep))
+        print("-----------------------------------------------------------------")
+        avg_performance = np.around(np.mean(min_performance), 4)
+        harmonic_performance = np.around(hmean(min_performance), 4)
         return avg_performance, harmonic_performance

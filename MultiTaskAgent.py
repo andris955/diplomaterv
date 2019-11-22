@@ -43,9 +43,9 @@ class MultiTaskAgent:
         if self.transfer:
             data, elapsed_time, total_episodes_learnt, total_timesteps, total_training_updates = self.logger.init_train_data()
             self.start_time -= elapsed_time
-            self.total_episodes_learnt = total_episodes_learnt
-            self.total_timesteps = total_timesteps
-            self.total_training_updates = total_training_updates
+            self.total_episodes_learnt = int(total_episodes_learnt)
+            self.total_timesteps = int(total_timesteps)
+            self.total_training_updates = int(total_training_updates)
 
         self.training_updates = {}
         self.episodes_learnt = {}
@@ -55,8 +55,8 @@ class MultiTaskAgent:
                 self.episodes_learnt[task] = 0
         else:
             for task in self.tasks:
-                self.training_updates[task] = data[task]['train_step'].values[0]
-                self.episodes_learnt[task] = data[task]['episode_learn'].values[0]
+                self.training_updates[task] = data[task]['training_updates'].values[0]
+                self.episodes_learnt[task] = data[task]['episodes_learnt'].values[0]
 
         self.tbw = None
         self.writer = None
@@ -79,7 +79,7 @@ class MultiTaskAgent:
             self.model = MultitaskA2C(self.policy, self.sub_proc_environments, tensorboard_log=self.tb_log,
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=self.n_steps)
         else:
-            self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.sub_proc_environments, transfer=True,
+            self.model, _ = MultitaskA2C.load(self.model_id, self.n_cpus, envs_to_set=self.sub_proc_environments, transfer=True,
                                               total_train_steps=self.total_training_updates, num_timesteps=self.total_timesteps)
 
         self.tbw = self.model._setup_multitask_learn(self.model_id)
@@ -96,21 +96,20 @@ class MultiTaskAgent:
         episode_score, policy_loss, value_loss, episodes_training_updates = \
             self.model.multi_task_learn_for_one_episode(task, runner, max_episode_timesteps, self.writer)
         self.total_timesteps = self.model.num_timesteps
+        self.episodes_learnt[task] += 1
+        self.total_episodes_learnt += 1
+        self.total_training_updates += int(episodes_training_updates)
+        self.training_updates[task] += int(episodes_training_updates)
         if self.logging:
             policy_loss = round(policy_loss, 2)
             value_loss = round(value_loss, 2)
-            self.total_episodes_learnt += 1
-            self.episodes_learnt[task] += 1
-            self.total_training_updates += episodes_training_updates
-            self.training_updates[task] += episodes_training_updates
             log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),
                                       total_timesteps=self.total_timesteps,
                                       total_training_updates=self.total_training_updates,
                                       total_episodes_learnt=self.total_episodes_learnt,
+                                      max_episode_timesteps=max_episode_timesteps,
                                       episodes_learnt=self.episodes_learnt[task],
                                       training_updates=self.training_updates[task],
-                                      # relative_performance=np.around(episode_score / config.target_performances[task], 2),
-                                      # score=np.around(episode_score, 2),
                                       policy_loss=policy_loss,
                                       value_loss=value_loss)
             self.logger.log(task, log_value)
@@ -156,9 +155,9 @@ class MultiTaskAgent:
 
     def save_model(self, avg_performance: float, harmonic_performance: float, json_params: dict):
         json_params.update({
-            "total_episodes_learnt": self.total_episodes_learnt,
-            "total_timesteps": self.total_timesteps,
-            "total_training_updates": self.total_training_updates,
+            "total_episodes_learnt": int(self.total_episodes_learnt),
+            "total_timesteps": int(self.total_timesteps),
+            "total_training_updates": int(self.total_training_updates),
         })
         base_path = os.path.join(config.model_path, self.model_id)
         id = "{:08}-{:1.2f}-{:1.2f}".format(self.model.num_timesteps, avg_performance, harmonic_performance)

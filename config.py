@@ -60,7 +60,7 @@ n_steps = 10
 seed = 3
 
 stdout_logging_frequency_in_train_steps = 100
-file_logging_frequency_in_episodes = 5  # number of episodes
+file_logging_frequency_in_episodes = 10  # number of episodes
 verbose = 1
 
 meta_layers = (100, 100, "lstm")

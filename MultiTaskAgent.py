@@ -97,6 +97,8 @@ class MultiTaskAgent:
             self.model.multi_task_learn_for_one_episode(task, runner, max_episode_timesteps, self.writer)
         self.total_timesteps = self.model.num_timesteps
         if self.logging:
+            policy_loss = round(policy_loss, 2)
+            value_loss = round(value_loss, 2)
             self.total_episodes_learnt += 1
             self.episodes_learnt[task] += 1
             self.total_training_updates += episodes_training_updates
@@ -109,8 +111,8 @@ class MultiTaskAgent:
                                       training_updates=self.training_updates[task],
                                       # relative_performance=np.around(episode_score / config.target_performances[task], 2),
                                       # score=np.around(episode_score, 2),
-                                      policy_loss=np.around(policy_loss, 2),
-                                      value_loss=np.around(value_loss, 2))
+                                      policy_loss=policy_loss,
+                                      value_loss=value_loss)
             self.logger.log(task, log_value)
             self.data_available[self.tasks.index(task)] = True
             if self.total_episodes_learnt % config.file_logging_frequency_in_episodes == 0 and all(self.data_available) is True:
@@ -163,7 +165,7 @@ class MultiTaskAgent:
         if not os.path.exists(base_path):
             os.mkdir(base_path)
         try:
-            self.model.save(base_path, id)
+            self.model.save(base_path, id, json_params)
         except:
             print("Error saving the MultiTaskA2C model")
 

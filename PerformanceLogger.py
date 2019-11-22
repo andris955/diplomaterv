@@ -58,6 +58,6 @@ class PerformanceLogger:
             self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, env=self.envs_for_test[task])
             self.performance[i] = min(self.scores[i] / ta[task], 1)
         self.worst_performing_task_timestep = self.timesteps[self.performance.argmin()]
-        avg_performance = np.around(np.mean(self.performance), 2)
-        harmonic_performance = np.around(hmean(self.performance), 2)
+        avg_performance = np.around(np.mean(self.performance), 4)
+        harmonic_performance = np.around(hmean(self.performance), 4)
         return avg_performance, harmonic_performance

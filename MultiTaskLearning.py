@@ -37,8 +37,8 @@ class MultiTaskLearning:
 
         self.verbose = verbose
         self.logging = logging
-        self.best_avg_performance = 0.1
-        self.best_harmonic_performance = 0.05
+        self.best_avg_performance = 0.01
+        self.best_harmonic_performance = 0.01
 
         self.n_steps = config.n_steps
         self.n_cpus = n_cpus
@@ -52,6 +52,19 @@ class MultiTaskLearning:
             'frame_stack': policy != "lstm",
             'scale': False,
         }
+
+        self.json_params = json_params
+        self.json_params.update({
+            'algorithm': self.algorithm,
+            'tasks': self.tasks,
+            "seed": config.seed,
+            "model_id": self.model_id,
+            "uniform_policy_steps": self.uniform_policy_steps,
+            "number_of_episodes_for_estimating": self.n,
+            "best_avg_performance": self.best_avg_performance,
+            "best_harmonic_performance": self.best_harmonic_performance,
+        })
+        self.json_params.update(env_kwargs)
 
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging, env_kwargs=env_kwargs)
 
@@ -72,19 +85,6 @@ class MultiTaskLearning:
         for _ in range(len(self.tasks)):
             self.s.append(deque([1.0], 1))
             self.a.append(0.0)
-
-        self.json_params = json_params
-        self.json_params.update({
-            'algorithm': self.algorithm,
-            'tasks': self.tasks,
-            "seed": config.seed,
-            "model_id": self.model_id,
-            "uniform_policy_steps": self.uniform_policy_steps,
-            "number_of_episodes_for_estimating": self.n,
-            "best_avg_performance": self.best_avg_performance,
-            "best_harmonic_performance": self.best_harmonic_performance,
-        })
-        self.json_params.update(env_kwargs)
 
         if self.algorithm == "A5C":
             self.__A5C_init()
@@ -118,7 +118,7 @@ class MultiTaskLearning:
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                max_episode_timesteps = int(1.2 * self.performance_logger.worst_performing_task_timestep)
+                max_episode_timesteps = int(1.5 * self.performance_logger.worst_performing_task_timestep)
                 episode_score = self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps=max_episode_timesteps)
                 self.s[j].append(episode_score)
 

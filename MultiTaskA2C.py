@@ -508,7 +508,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         episode_training_updates = 0
         episode_timesteps = 0
 
-        while (not (True in mask)) or episode_timesteps >= max_episode_timesteps:
+        while not (True in mask or episode_timesteps >= max_episode_timesteps):
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.total_train_steps += 1

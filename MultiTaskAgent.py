@@ -100,7 +100,7 @@ class MultiTaskAgent:
         self.total_episodes_learnt += 1
         self.total_training_updates += int(episodes_training_updates)
         self.training_updates[task] += int(episodes_training_updates)
-        if self.logging:
+        if self.logging and self.episodes_learnt['task'] % config.logging_frequency_in_episodes == 0:
             policy_loss = round(policy_loss, 2)
             value_loss = round(value_loss, 2)
             log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),
@@ -114,7 +114,7 @@ class MultiTaskAgent:
                                       value_loss=value_loss)
             self.logger.log(task, log_value)
             self.data_available[self.tasks.index(task)] = True
-            if self.total_episodes_learnt % config.file_logging_frequency_in_episodes == 0 and all(self.data_available) is True:
+            if self.total_episodes_learnt % config.dump_frequency_in_episodes == 0 and all(self.data_available) is True:
                 self.logger.dump()
 
         return episode_score

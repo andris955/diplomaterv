@@ -572,7 +572,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "alpha": self.alpha,
             "epsilon": self.epsilon,
             "lr_schedule": self.lr_schedule,
-            "verbose": self.verbose,
             "observation_space_dict": self.observation_space_dict,
             "action_space_dict": self.action_space_dict,
             'tensorboard_log': self.tensorboard_log,

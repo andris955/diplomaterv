@@ -46,7 +46,7 @@ class MultiTaskLearning:
             self.lambda_ = config.meta_lambda
             env_kwargs = {
                 'episode_life': True,
-                'clip_rewards': False,
+                'clip_rewards': True,
                 'frame_stack': policy != "lstm",
                 'scale': False,
             }
@@ -78,6 +78,7 @@ class MultiTaskLearning:
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging, env_kwargs=env_kwargs)
 
         env_kwargs['episode_life'] = False
+        env_kwargs['clip_rewards'] = False
         envs_for_test = {}
         for task in self.tasks:
             envs_for_test[task] = make_atari_env(task, 1, config.seed, wrapper_kwargs=env_kwargs)
@@ -104,11 +105,12 @@ class MultiTaskLearning:
     def __A5C_train(self):
         with SetVerbosity(self.verbose):
             while 1:
-                if self.amta.total_episodes_learnt % config.file_logging_frequency_in_episodes == 0:
+                if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
                     if self.logging:
                         self.performance_logger.log(self.amta.total_timesteps)
-                        self.performance_logger.dump()
+                        if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                            self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
@@ -136,11 +138,12 @@ class MultiTaskLearning:
             action = j = 0
             value = np.array([0])
             while 1:
-                if self.amta.total_episodes_learnt % config.file_logging_frequency_in_episodes == 0:
+                if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
                     if self.logging:
                         self.performance_logger.log(self.amta.total_timesteps)
-                        self.performance_logger.dump()
+                        if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                            self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                     self.ma.save_model(self.amta.model.total_train_steps)

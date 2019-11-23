@@ -61,7 +61,8 @@ seed = 3
 timestep_coeff = 1.2
 
 stdout_logging_frequency_in_train_steps = 100
-file_logging_frequency_in_episodes = 10  # number of episodes
+logging_frequency_in_episodes = 10
+dump_frequency_in_episodes = 100  # number of episodes
 verbose = 1
 
 meta_layers = (100, 100, "lstm")

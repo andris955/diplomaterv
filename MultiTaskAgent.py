@@ -80,7 +80,7 @@ class MultiTaskAgent:
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=self.n_steps)
         else:
             self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.sub_proc_environments, transfer=True,
-                                              total_train_steps=self.total_training_updates, num_timesteps=self.total_timesteps)
+                                              total_training_updates=self.total_training_updates, total_timesteps=self.total_timesteps)
 
         self.tbw = self.model._setup_multitask_learn(self.model_id)
         if self.tbw is not None:
@@ -123,7 +123,7 @@ class MultiTaskAgent:
     def _play_n_game(model, task: str, n_games: int, display=False, env=None):
         sum_reward = 0
         if env is None:
-            env = make_atari_env(task, 1, config.seed)
+            env = model.env_dict[task]
         obs = env.reset()
         done = False
         state = None
@@ -149,7 +149,7 @@ class MultiTaskAgent:
         model, tasks = MultitaskA2C.load(model_id)
         for task in tasks:
             print(task)
-            sum_reward = MultiTaskAgent._play_n_game(model, task, n_games, display)
+            sum_reward, _ = MultiTaskAgent._play_n_game(model, task, n_games, display)
             print("Achieved score: {}".format(sum_reward[0]))
             print("Relative performance: {}%".format(np.around(sum_reward[0]/config.target_performances[task], 2)*100))
 

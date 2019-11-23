@@ -116,17 +116,17 @@ class Scheduler(object):
         return self.initial_value * self.schedule(steps / self.nvalues)
 
 
-def _save_model_to_file(save_path, id, model, json_params=None, weights=None, params=None):
-    if model != "multitask" and model != "meta":
-        raise ValueError("model must be either str(multitask) or str(meta)")
+def _save_model_to_file(save_path, id, model_type, json_params=None, weights=None, params=None):
+    if model_type != "multitask" and model_type != "meta":
+        raise ValueError("model_type must be either str(multitask) or str(meta)")
     if isinstance(save_path, str):
         _, ext = os.path.splitext(save_path)
         if ext == "":
-            if model == "multitask":
-                model_path = os.path.join(save_path, model + '_model-' + id + '.pkl')
+            if model_type == "multitask":
+                model_path = os.path.join(save_path, model_type + '_model-' + id + '.pkl')
             else:
-                model_path = os.path.join(save_path, model + '_model.pkl')
-            param_path = os.path.join(save_path, model + '_params' + '.json')
+                model_path = os.path.join(save_path, model_type + '_model.pkl')
+            param_path = os.path.join(save_path, model_type + '_params' + '.json')
 
             with open(model_path, "wb") as file_:
                 cloudpickle.dump((weights, params), file_)
@@ -140,11 +140,11 @@ def _save_model_to_file(save_path, id, model, json_params=None, weights=None, pa
         raise ValueError("Error: save_path must be a string")
 
 
-def _load_model_from_file(load_path, model):
-    if model != "multitask" and model != "meta":
-        raise ValueError("model must be either str(multitask) or str(meta)")
+def _load_model_from_file(load_path, model_type):
+    if model_type != "multitask" and model_type != "meta":
+        raise ValueError("model_type must be either str(multitask) or str(meta)")
     if isinstance(load_path, str):
-        model_path = os.path.join(load_path, model + '_model.pkl')
+        model_path = os.path.join(load_path, model_type + '_model.pkl')
         if os.path.exists(model_path):
             with open(model_path, "rb") as file:
                 weights, params = cloudpickle.load(file)
@@ -156,10 +156,10 @@ def _load_model_from_file(load_path, model):
     return weights, params
 
 
-def read_params(model_id, model):
-    if model != "multitask" and model != "meta":
-        raise ValueError("model must be either str(multitask) or str(meta)")
-    with open(os.path.join(os.path.join(config.model_path, model_id), model + '_params.json'), "r") as file:
+def read_params(model_id, model_type):
+    if model_type != "multitask" and model_type != "meta":
+        raise ValueError("model_type must be either str(multitask) or str(meta)")
+    with open(os.path.join(os.path.join(config.model_path, model_id), model_type + '_params.json'), "r") as file:
         params = json.load(file)
     return params
 

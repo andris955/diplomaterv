@@ -4,7 +4,6 @@ import tensorflow as tf
 from abc import ABC, abstractmethod
 import os
 import sys
-from utils import read_params
 
 from MultiTaskPolicy import MultiTaskActorCriticPolicy, get_policy_from_string
 from MultiTaskRunner import MultiTaskA2CRunner
@@ -75,10 +74,10 @@ class BaseMultitaskRLModel(ABC):
         """
         return self.env_dict
 
-    def set_envs_by_name(self, tasks: list):
+    def set_envs_by_name(self, tasks: list, env_kwargs: dict):
         self.env_dict = {}
         for task in tasks:
-            self.env_dict[task] = DummyVecEnv([lambda: make_atari_env(task)])
+            self.env_dict[task] = env_utils.make_atari_env(task, 1, config.seed, wrapper_kwargs=env_kwargs)
 
     def set_envs(self, env_dict, tasks: list):
         """
@@ -228,13 +227,12 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         pass
 
     @classmethod
-    def load(cls, model_id: str, envs_to_set=None, transfer=False, total_train_steps=None, num_timesteps=None):
+    def load(cls, model_id: str, envs_to_set=None, transfer=False, total_training_updates=None, total_timesteps=None):
         #TODO This function does not update trainer/optimizer variables (e.g. momentum). As such training after using this function may lead to less-than-optimal results.
         if transfer:
-            if not (total_train_steps or num_timesteps):
+            if not (total_training_updates or total_timesteps):
                 raise ValueError("If transfer learning is active total_train_steps and num_timesteps must be provided!")
-            else:
-                if not (num_timesteps == int(num_timesteps) and total_train_steps == int(total_train_steps)):
+            if not (total_timesteps == int(total_timesteps) and total_training_updates == int(total_training_updates)):
                     raise TypeError("total_train_steps and num_timesteps must be integers")
 
         load_path = os.path.join(config.model_path, model_id)
@@ -243,9 +241,11 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         model = cls(policy=params['policy_name'], env_dict=None, _init_setup_model=False)
         model.__dict__.update(params)
 
-        model.num_timesteps = num_timesteps
-        model.total_train_steps = total_train_steps
+        model.num_timesteps = total_timesteps
+        model.total_train_steps = total_training_updates
         tasks = params["tasks"]
+
+        params = utils.read_params(model_id, "multitask")
 
         if transfer:
             tasks_to_set = list(envs_to_set.keys())
@@ -259,7 +259,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
                 sys.exit()
         else:
             model.setup_step_model()
-            model.set_envs_by_name(tasks)
+            model.set_envs_by_name(tasks, env_kwargs=params['env_kwargs'])
 
         restores = []
         for param, loaded_weight in zip(model.trainable_variables, weights):

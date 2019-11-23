@@ -72,16 +72,3 @@ tensorboard_log = "./data/tb_logs/"
 model_path = "./data/models/"
 log_path = "./data/logs/"
 
-# if __name__ == '__main__':
-#     import gym
-#     import time
-#     for game in MTIC2:
-#         print(game)
-#         env = gym.make(game)
-#         env.reset()
-#         for _ in range(150):
-#             action = env.action_space.sample()
-#             env.step(action)
-#             env.render()
-#             time.sleep(0.05)
-#     print("ok")

@@ -44,4 +44,4 @@ def main(algorithm: str, selected_mti: list, policy: str, n_cpus: int, selected_
 
 if __name__ == '__main__':
     main(algorithm="A5C", selected_mti=config.MTIC1, policy="lstm", n_cpus=cpu_count(),
-         selected_gpus="", train=False, tensorboard_logging=False, logging=True, model_id="A5C_19_11_22_19_51")
+         selected_gpus="1", train=True, tensorboard_logging=False, logging=True, model_id="")

@@ -100,7 +100,7 @@ class MultiTaskAgent:
         self.total_episodes_learnt += 1
         self.total_training_updates += int(episodes_training_updates)
         self.training_updates[task] += int(episodes_training_updates)
-        if self.logging and self.episodes_learnt['task'] % config.logging_frequency_in_episodes == 0:
+        if self.logging and self.episodes_learnt[task] % config.logging_frequency_in_episodes == 0:
             policy_loss = round(policy_loss, 2)
             value_loss = round(value_loss, 2)
             log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),

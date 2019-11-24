@@ -61,13 +61,13 @@ class PerformanceTesterAndLogger:
 
     def performance_test(self, amta, ta: dict):
         min_performance = np.zeros(len(self.tasks))
+        print("-----------------------------------------------------------------")
         for i, task in enumerate(self.tasks):
             self.scores[i], self.timesteps[i] = amta.test_performance(task)
             self.performance[i] = self.scores[i] / ta[task]
             min_performance[i] = min(self.scores[i] / ta[task], 1)
         index = self.performance.argmin()
-        self.worst_performing_task_timestep = self.timesteps[index]
-        print("-----------------------------------------------------------------")
+        self.worst_performing_task_timestep = self.timesteps[index] # TODO rossz az elképzelés, nem feltétlenül a legrosszabbul teljesítőnek a legkisebb a timestepje
         print("Worst performing task: {} with {} timestep".format(self.tasks[index], self.worst_performing_task_timestep))
         print("-----------------------------------------------------------------")
         avg_performance = float(np.mean(min_performance))

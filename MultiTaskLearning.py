@@ -104,10 +104,10 @@ class MultiTaskLearning:
     def __A5C_train(self): # TODO kitesztelni
         with SetVerbosity(self.verbose):
             while 1:
-                if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
+                if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
-                    if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                    if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
@@ -135,10 +135,10 @@ class MultiTaskLearning:
             action = j = 0
             value = np.array([0])
             while 1:
-                if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
+                if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
-                    if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                    if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)

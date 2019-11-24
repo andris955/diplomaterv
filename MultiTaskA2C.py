@@ -514,7 +514,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         all_process_ended = False
         tmp_scores = np.zeros(self.n_batch)
 
-        print("Max episode timesteps: {}".format(max_episode_timesteps))
         while not (all_process_ended or episode_timesteps >= max_episode_timesteps):
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1

@@ -109,7 +109,11 @@ class MultiTaskAgent:
         self.total_episodes_learnt += 1
         self.total_training_updates += int(episodes_training_updates)
         self.training_updates[task] += int(episodes_training_updates)
+        print("Max episode timesteps: {}".format(max_episode_timesteps))
+        print("{} episodes learnt: {}".format(task, self.episodes_learnt[task]))
+        print("Total episodes learnt: {}".format(self.total_episodes_learnt))
         if self.logging and self.episodes_learnt[task] % config.logging_frequency_in_episodes == 0:
+            print("Logging {}".format(task))
             policy_loss = round(float(policy_loss), 2)
             value_loss = round(float(value_loss), 2)
             log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),
@@ -123,13 +127,14 @@ class MultiTaskAgent:
                                       value_loss=value_loss)
             self.logger.log(task, log_value)
             self.data_available[self.tasks.index(task)] = True
-            if self.total_episodes_learnt % config.dump_frequency_in_episodes == 0 and all(self.data_available) is True:
-                self.logger.dump()
-                print("Training information logged")
+        if self.logging and self.total_episodes_learnt % (config.logging_frequency_in_episodes*10) == 0 and all(self.data_available):
+            self.logger.dump()
+            print("Training information logged")
 
         return episode_score
 
     def test_performance(self, task: str):
+        start = time.time()
         env = self.testing_envs[task]
         obs = env.reset()
         n_env = obs.shape[0]
@@ -146,11 +151,14 @@ class MultiTaskAgent:
             all_done = all(mask)
             timesteps += np.ones(n_env) * (1 - mask)
             sum_reward += reward * (1 - mask)
-        sum_reward = float(np.mean(sum_reward))
+        sum_reward = int(np.mean(sum_reward))
         if sum_reward == 0:  # harmonic mean needs greater than zero elements
             sum_reward = 0.1
-        timesteps = float(np.mean(timesteps))
-        env.close()
+        timesteps = int(np.mean(timesteps))
+        duration = int(time.time()-start)
+        print(task)
+        print("Testing {} env ended in {} sec with {} fps".format(n_env, duration, int(n_env*timesteps/duration)))
+        print("Performance: {}% timestep: {}\n".format(int(sum_reward/config.target_performances[task]*100), timesteps))
         return sum_reward, timesteps
 
     @staticmethod
@@ -170,10 +178,10 @@ class MultiTaskAgent:
                 if display is True:
                     env.render()
                     time.sleep(0.005)
-        sum_reward = float(sum_reward / n_games)
+        sum_reward = int(sum_reward / n_games)
         if sum_reward == 0:  # harmonic mean needs greater than zero elements
             sum_reward = 0.1
-        timesteps = timesteps / n_games
+        timesteps = int(timesteps / n_games)
         env.close()
         return sum_reward, timesteps
 

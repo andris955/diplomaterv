@@ -12,7 +12,6 @@ from EpisodeRewardCalculator import EpisodeRewardCalculator
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common import set_global_seeds
-from stable_baselines.common.vec_env import DummyVecEnv
 
 
 from stable_baselines import logger
@@ -218,7 +217,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         if not vectorized_env:
             if state is not None:
                 raise ValueError("Error: The environment must be vectorized when using recurrent policies.")
-            actions = actions[0]  # TODO?
+            actions = actions[0]
 
         return actions, state
 
@@ -230,7 +229,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
     def load(cls, model_id: str, envs_to_set=None, transfer=False, total_training_updates=None, total_timesteps=None):
         #TODO This function does not update trainer/optimizer variables (e.g. momentum). As such training after using this function may lead to less-than-optimal results.
         if transfer:
-            if not (total_training_updates or total_timesteps):
+            if total_training_updates is None or total_timesteps is None:
                 raise ValueError("If transfer learning is active total_train_steps and num_timesteps must be provided!")
             if not (total_timesteps == int(total_timesteps) and total_training_updates == int(total_training_updates)):
                     raise TypeError("total_train_steps and num_timesteps must be integers")
@@ -246,6 +245,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         tasks = params["tasks"]
 
         params = utils.read_params(model_id, "multitask")
+        env_kwargs = params['env_kwargs']
 
         if transfer:
             tasks_to_set = list(envs_to_set.keys())
@@ -259,7 +259,9 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
                 sys.exit()
         else:
             model.setup_step_model()
-            model.set_envs_by_name(tasks, env_kwargs=params['env_kwargs'])
+            env_kwargs['episode_life'] = False
+            env_kwargs['clip_rewards'] = False
+            model.set_envs_by_name(tasks, env_kwargs=env_kwargs)
 
         restores = []
         for param, loaded_weight in zip(model.trainable_variables, weights):
@@ -366,7 +368,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             self.sess = tf_utils.make_session(graph=self.graph)
 
             self.step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
-                                     reuse=False)
+                                          reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
             self.step = self.step_model.step
@@ -580,6 +582,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         }
 
         json_params.update({
+            "policy": self.policy_name,
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
@@ -593,6 +596,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             "action_spaces": {},
             "n_envs_per_task": self.n_envs_per_task,
             "max_scheduler_timesteps": self.max_scheduler_timesteps,
+            "n_lstm": config.n_lstm,
         })
 
         for game, value in self.action_space_dict.items():

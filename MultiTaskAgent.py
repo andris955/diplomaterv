@@ -35,12 +35,14 @@ class MultiTaskAgent:
 
         self.transfer = True if os.path.exists(os.path.join(config.model_path, self.model_id)) and self.model_id else False
 
+        self.logger = None
+        self.logvalue = None
         if self.logging:
             self.logvalue = CustomMessengerClass
             self.logger = Logger(self.model_id, self.tasks)
 
         data = None
-        if self.transfer:
+        if self.transfer and self.logging:
             data, elapsed_time, total_episodes_learnt, total_timesteps, total_training_updates = self.logger.init_train_data()
             self.start_time -= elapsed_time
             self.total_episodes_learnt = int(total_episodes_learnt)
@@ -101,8 +103,8 @@ class MultiTaskAgent:
         self.total_training_updates += int(episodes_training_updates)
         self.training_updates[task] += int(episodes_training_updates)
         if self.logging and self.episodes_learnt[task] % config.logging_frequency_in_episodes == 0:
-            policy_loss = round(policy_loss, 2)
-            value_loss = round(value_loss, 2)
+            policy_loss = round(float(policy_loss), 2)
+            value_loss = round(float(value_loss), 2)
             log_value = self.logvalue(elapsed_time=int(time.time() - self.start_time),
                                       total_timesteps=self.total_timesteps,
                                       total_training_updates=self.total_training_updates,
@@ -121,15 +123,15 @@ class MultiTaskAgent:
 
     @staticmethod
     def _play_n_game(model, task: str, n_games: int, display=False, env=None):
-        sum_reward = 0
         if env is None:
             env = model.env_dict[task]
-        obs = env.reset()
-        done = False
-        state = None
-        mask = None
         timesteps = 0
+        sum_reward = 0
         for i in range(n_games):
+            obs = env.reset()
+            done = False
+            state = None
+            mask = None
             while not done:
                 action, state = model.predict(task, obs, state, mask)
                 obs, reward, done, info = env.step(action)
@@ -137,6 +139,7 @@ class MultiTaskAgent:
                 sum_reward += reward
                 if display is True:
                     env.render()
+                    time.sleep(0.005)
         sum_reward = sum_reward / n_games
         if sum_reward == 0:  # harmonic mean needs greater than zero elements
             sum_reward = 0.1
@@ -149,8 +152,9 @@ class MultiTaskAgent:
         model, tasks = MultitaskA2C.load(model_id)
         for task in tasks:
             print(task)
-            sum_reward, _ = MultiTaskAgent._play_n_game(model, task, n_games, display)
+            sum_reward, timesteps = MultiTaskAgent._play_n_game(model, task, n_games, display)
             print("Achieved score: {}".format(sum_reward[0]))
+            print("Timesteps: {}".format(timesteps))
             print("Relative performance: {}%".format(np.around(sum_reward[0]/config.target_performances[task], 2)*100))
 
     def save_model(self, avg_performance: float, harmonic_performance: float, json_params: dict):

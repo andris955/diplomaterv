@@ -52,24 +52,30 @@ target_performances = {
     'Enduro-v0': 0.77
 }
 
-number_of_episodes_for_estimating = 3
+number_of_episodes_for_estimating = 5
 uniform_policy_steps = 100_000  # Number of time steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
 max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe.
-tau = 1
 n_steps = 10
-seed = 3
 timestep_coeff = 1.2
+tau = 1
 
-stdout_logging_frequency_in_train_steps = 100
-logging_frequency_in_episodes = 10
-dump_frequency_in_episodes = 100  # number of episodes
-verbose = 1
+# Nem íródik felül transfernél
+n_lstm = 256
 
+# Nem íródnak felül transfernél
 meta_layers = (100, 100, "lstm")
 meta_lstm_units = 100
+
+meta_n_steps = 10
 meta_lambda = 0.5
+
+# Nem íródnak felül transfernél de nem is kell
+seed = 3
+stdout_logging_frequency_in_train_steps = 100
+logging_frequency_in_episodes = 10
+dump_frequency_in_episodes = 100
+verbose = 1
 
 tensorboard_log = "./data/tb_logs/"
 model_path = "./data/models/"
 log_path = "./data/logs/"
-

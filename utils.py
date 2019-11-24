@@ -42,6 +42,14 @@ class CustomMessengerClass:
         return list(self.__dict__.keys())
 
 
+def make_date_id(date_now):
+    now = str(date_now)[2:16]
+    now = now.replace(' ', '_')
+    now = now.replace(':', '_')
+    now = now.replace('-', '_')
+    return now
+
+
 def one_hot(k, n):
     """
     :param k: Index of the 1.

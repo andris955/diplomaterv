@@ -8,6 +8,7 @@ from stable_baselines.common.distributions import make_proba_dist_type, Categori
 from tf_utils import observation_input
 
 from policy_utils import batch_to_seq
+import config
 
 
 def shared_network(scaled_images):
@@ -224,20 +225,20 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
     :param layer_norm: (bool) Whether or not to use layer normalizing LSTMs
     """
 
-    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, n_lstm=256, reuse=False,
+    def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False,
                  feature_extractor=shared_network, layer_norm=True):
         super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
-        self.n_lstm = n_lstm
+        self.n_lstm = config.n_lstm
         with tf.variable_scope("input", reuse=True):
             self.masks_ph = tf.placeholder(tf.float32, [None], name="masks_ph")  # mask (done t-1)
             # n_lstm * 2 dim because of the cell and hidden states of the LSTM
-            self.states_ph = tf.placeholder(tf.float32, [None, n_lstm * 2], name="states_ph")  # states
+            self.states_ph = tf.placeholder(tf.float32, [None, self.n_lstm * 2], name="states_ph")  # states
 
         with tf.variable_scope("shared_model", reuse=reuse):
             extracted_features = feature_extractor(self.processed_obs)
             input_sequence = batch_to_seq(extracted_features, self.n_steps) # n_steps x [n_env x feature extractor output shape]
             masks = batch_to_seq(self.masks_ph, self.n_steps) # n_steps x [n_env x 1]
-            rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
+            rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=self.n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
             latent_vector = seq_to_batch(rnn_output) # (n_steps * n_envs) x n_lstm
 
         for task in self.pdtype_dict.keys():

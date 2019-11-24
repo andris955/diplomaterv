@@ -7,7 +7,7 @@ from MultiTaskAgent import MultiTaskAgent
 from MetaAgent import MetaAgent
 import utils
 import datetime
-from PerformanceLogger import PerformanceLogger
+from PerformanceTesterAndLogger import PerformanceTesterAndLogger
 import copy
 
 
@@ -24,26 +24,30 @@ class MultiTaskLearning:
             params = read_params(model_id, "multitask")
             self.tasks = params['tasks']
             self.model_id = model_id
-            self.algorithm = params['algorithm']
+            self.algorithm = params['multitask_algorithm']
             self.n_steps = params['n_steps']
             self.timestep_coeff = params['timestep_coeff']
             self.uniform_policy_steps = params["uniform_policy_steps"]  # Number of tasks to consider in the computation of r2.
             self.n = params["number_of_episodes_for_estimating"]  # Number of episodes which are used for estimating current performance in any task Ti
             self.lambda_ = params['lambda']
+            self.tau = params['tau']
             env_kwargs = params['env_kwargs']
+            meta_n_steps = params['meta_n_steps']
         else:
             self.tasks = tasks
-            self.algorithm = algorithm
-            now = str(datetime.datetime.now())[2:16]
-            now = now.replace(' ', '_')
-            now = now.replace(':', '_')
-            now = now.replace('-', '_')
+            if algorithm == "EA4C" or algorithm == "A5C":
+                self.algorithm = algorithm
+            else:
+                raise ValueError("algorithm can only be A5C or EA4C.")
+            now = utils.make_date_id(datetime.datetime.now())
             self.n_steps = config.n_steps
             self.timestep_coeff = config.timestep_coeff
             self.model_id = self.algorithm + "_" + now
+            self.tau = config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
             self.uniform_policy_steps = config.uniform_policy_steps  # Number of tasks to consider in the computation of r2.
             self.n = config.number_of_episodes_for_estimating  # Number of episodes which are used for estimating current performance in any task Ti
             self.lambda_ = config.meta_lambda
+            meta_n_steps = config.meta_n_steps
             env_kwargs = {
                 'episode_life': True,
                 'clip_rewards': True,
@@ -54,7 +58,6 @@ class MultiTaskLearning:
         self.ta = config.target_performances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
 
         self.verbose = verbose
-        self.logging = logging
         self.best_avg_performance = 0.01
         self.best_harmonic_performance = 0.01
 
@@ -62,7 +65,7 @@ class MultiTaskLearning:
 
         self.json_params = json_params
         self.json_params.update({
-            'algorithm': self.algorithm,
+            'multitask_algorithm': self.algorithm,
             'tasks': self.tasks,
             "seed": config.seed,
             "model_id": self.model_id,
@@ -72,8 +75,10 @@ class MultiTaskLearning:
             "number_of_episodes_for_estimating": self.n,
             "best_avg_performance": self.best_avg_performance,
             "best_harmonic_performance": self.best_harmonic_performance,
+            "meta_n_steps": meta_n_steps,
+            "tau": self.tau,
+            'env_kwargs': copy.deepcopy(env_kwargs)
         })
-        self.json_params.update({"env_kwargs": copy.deepcopy(env_kwargs)})
 
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, self.n_steps, self.n_cpus, tensorboard_logging, logging, env_kwargs=env_kwargs)
 
@@ -83,34 +88,32 @@ class MultiTaskLearning:
         for task in self.tasks:
             envs_for_test[task] = make_atari_env(task, 1, config.seed, wrapper_kwargs=env_kwargs)
 
-        self.performance_logger = PerformanceLogger(tasks=self.tasks, model_id=self.model_id, envs_for_test=envs_for_test, ta=self.ta)
+        self.performance_logger = PerformanceTesterAndLogger(tasks=self.tasks, model_id=self.model_id, envs_for_test=envs_for_test,
+                                                             ta=self.ta, logging=logging)
 
         self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
         self.a = []  # Average scores for every task
-
         for _ in range(len(self.tasks)):
             self.a.append(0.0)
 
         if self.algorithm == "A5C":
             self.__A5C_init()
         elif self.algorithm == "EA4C":
-            self.__EA4C_init()
+            self.__EA4C_init(meta_n_steps)
 
     def __A5C_init(self):
         self.m = []
-        self.tau = config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
         for _ in range(len(self.tasks)):
             self.m.append(1.0)
 
-    def __A5C_train(self):
+    def __A5C_train(self): # TODO kitesztelni
         with SetVerbosity(self.verbose):
             while 1:
                 if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
-                    if self.logging:
-                        self.performance_logger.log(self.amta.total_timesteps)
-                        if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
-                            self.performance_logger.dump()
+                    self.performance_logger.log(self.amta.total_timesteps)
+                    if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                        self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
@@ -128,9 +131,8 @@ class MultiTaskLearning:
                 max_episode_timesteps = int(self.timestep_coeff * self.performance_logger.worst_performing_task_timestep)
                 self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps=max_episode_timesteps)
 
-    def __EA4C_init(self):
+    def __EA4C_init(self, meta_n_steps):
         self.l = len(self.tasks) // 2
-        meta_n_steps = 5  # TODO ennek utána nézni.
         self.ma = MetaAgent(self.model_id, meta_n_steps, 3 * len(self.tasks), len(self.tasks))
 
     def __EA4C_train(self):
@@ -140,10 +142,9 @@ class MultiTaskLearning:
             while 1:
                 if self.amta.total_episodes_learnt % config.logging_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(n_games=self.n, amta=self.amta, ta=self.ta)
-                    if self.logging:
-                        self.performance_logger.log(self.amta.total_timesteps)
-                        if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
-                            self.performance_logger.dump()
+                    self.performance_logger.log(self.amta.total_timesteps)
+                    if self.amta.total_episodes_learnt % config.dump_frequency_in_episodes == 0:
+                        self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                     self.ma.save_model(self.amta.model.total_train_steps)
@@ -173,4 +174,3 @@ class MultiTaskLearning:
             self.__A5C_train()
         elif self.algorithm == "EA4C":
             self.__EA4C_train()
-

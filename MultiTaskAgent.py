@@ -1,25 +1,28 @@
-import config
-from Logger import Logger
-
 import gym
+import config
+import os
+import time
+import copy
+import numpy as np
+
 from env_utils import make_atari_env
+
+from Logger import Logger
+from utils import CustomMessengerClass
 from MultiTaskA2C import MultitaskA2C
 from MultiTaskRunner import MultiTaskA2CRunner
 
-import os
-from utils import CustomMessengerClass
-import time
-import numpy as np
-
 
 class MultiTaskAgent:
-    def __init__(self, model_id: str, policy: str, tasks: list, n_steps: int, n_cpus: int, tensorboard_logging, logging, env_kwargs):
+    def __init__(self, model_id: str, policy: str, tasks: list, n_steps: int, n_cpus: int, n_episodes: int, tensorboard_logging, logging, env_kwargs):
         self.model_id = model_id
         self.policy = policy
         self.tasks = tasks
         self.n_steps = n_steps
         self.n_cpus = n_cpus
-        self.sub_proc_environments = {}
+        self.n_episodes = n_episodes
+        self.learning_envs = {}
+        self.testing_envs = {}
         self.runners = {}
         self.env_kwargs = env_kwargs
         self.logging = logging
@@ -71,17 +74,21 @@ class MultiTaskAgent:
         self.__setup_runners()
 
     def __setup_environments(self):
+        learning_env_kwargs = copy.deepcopy(self.env_kwargs)
+        learning_env_kwargs['episode_life'] = False
+        learning_env_kwargs['clip_rewards'] = False
         for task in self.tasks:
             env = make_atari_env(task, self.n_cpus, config.seed, wrapper_kwargs=self.env_kwargs)
             assert isinstance(env.action_space, gym.spaces.Discrete), "Error: all the input games must have Discrete action space"
-            self.sub_proc_environments[task] = env
+            self.learning_envs[task] = env
+            self.testing_envs[task] = make_atari_env(task, self.n_episodes, config.seed, wrapper_kwargs=learning_env_kwargs)
 
     def __setup_model(self):
         if not self.transfer:
-            self.model = MultitaskA2C(self.policy, self.sub_proc_environments, tensorboard_log=self.tb_log,
+            self.model = MultitaskA2C(self.policy, self.learning_envs, tensorboard_log=self.tb_log,
                                       full_tensorboard_log=(self.tb_log is not None), n_steps=self.n_steps)
         else:
-            self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.sub_proc_environments, transfer=True,
+            self.model, _ = MultitaskA2C.load(self.model_id, envs_to_set=self.learning_envs, transfer=True,
                                               total_training_updates=self.total_training_updates, total_timesteps=self.total_timesteps)
 
         self.tbw = self.model._setup_multitask_learn(self.model_id)
@@ -90,7 +97,7 @@ class MultiTaskAgent:
 
     def __setup_runners(self):
         for task in self.tasks:
-            self.runners[task] = MultiTaskA2CRunner(task, self.sub_proc_environments[task],
+            self.runners[task] = MultiTaskA2CRunner(task, self.learning_envs[task],
                                                     self.model, n_steps=self.n_steps, gamma=0.99)
 
     def train_for_one_episode(self, task: str, max_episode_timesteps: int):
@@ -118,29 +125,52 @@ class MultiTaskAgent:
             self.data_available[self.tasks.index(task)] = True
             if self.total_episodes_learnt % config.dump_frequency_in_episodes == 0 and all(self.data_available) is True:
                 self.logger.dump()
+                print("Training information logged")
 
         return episode_score
 
+    def test_performance(self, task: str):
+        env = self.testing_envs[task]
+        obs = env.reset()
+        n_env = obs.shape[0]
+        sum_reward = np.zeros(n_env)
+        timesteps = np.zeros(n_env)
+        state = None
+        all_done = False
+        done = None
+        mask = np.asarray([False]*n_env)
+        while not all_done:
+            action, state = self.model.predict(task, obs, state, done)
+            obs, reward, done, info = env.step(action)
+            mask[np.where(done==True)] = True
+            all_done = all(mask)
+            timesteps += np.ones(n_env) * (1 - mask)
+            sum_reward += reward * (1 - mask)
+        sum_reward = float(np.mean(sum_reward))
+        if sum_reward == 0:  # harmonic mean needs greater than zero elements
+            sum_reward = 0.1
+        timesteps = float(np.mean(timesteps))
+        env.close()
+        return sum_reward, timesteps
+
     @staticmethod
-    def _play_n_game(model, task: str, n_games: int, display=False, env=None):
-        if env is None:
-            env = model.env_dict[task]
+    def _play_n_game(model, task: str, n_games: int, display=False):
+        env = model.env_dict[task]
         timesteps = 0
         sum_reward = 0
         for i in range(n_games):
             obs = env.reset()
-            done = False
+            done = None
             state = None
-            mask = None
             while not done:
-                action, state = model.predict(task, obs, state, mask)
+                action, state = model.predict(task, obs, state, done)
                 obs, reward, done, info = env.step(action)
                 timesteps += 1
                 sum_reward += reward
                 if display is True:
                     env.render()
                     time.sleep(0.005)
-        sum_reward = sum_reward / n_games
+        sum_reward = float(sum_reward / n_games)
         if sum_reward == 0:  # harmonic mean needs greater than zero elements
             sum_reward = 0.1
         timesteps = timesteps / n_games
@@ -153,9 +183,9 @@ class MultiTaskAgent:
         for task in tasks:
             print(task)
             sum_reward, timesteps = MultiTaskAgent._play_n_game(model, task, n_games, display)
-            print("Achieved score: {}".format(sum_reward[0]))
+            print("Achieved score: {}".format(sum_reward))
             print("Timesteps: {}".format(timesteps))
-            print("Relative performance: {}%".format(np.around(sum_reward[0]/config.target_performances[task], 2)*100))
+            print("Relative performance: {}%".format(round(sum_reward/config.target_performances[task], 2)*100))
 
     def save_model(self, avg_performance: float, harmonic_performance: float, json_params: dict):
         json_params.update({

@@ -4,7 +4,7 @@ from stable_baselines.common import set_global_seeds
 import gym
 
 def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
-                   start_index=0, start_method=None):
+                   start_index=1, start_method=None):
     """
     Create a wrapped, monitored SubprocVecEnv for Atari.
 

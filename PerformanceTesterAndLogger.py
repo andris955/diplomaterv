@@ -2,13 +2,15 @@ import time
 import os
 import config
 import numpy as np
+
 from scipy.stats import hmean
 from Logger import Logger
+
 from utils import CustomMessengerClass
 
 
 class PerformanceTesterAndLogger:
-    def __init__(self, tasks: list, model_id: str, envs_for_test: dict, ta: dict, logging: bool):
+    def __init__(self, tasks: list, model_id: str, ta: dict, logging: bool):
         self.tasks = tasks
         self.ta = ta
         self.start_time = time.time()
@@ -17,7 +19,6 @@ class PerformanceTesterAndLogger:
         self.scores = np.zeros(len(self.tasks))
         self.timesteps = np.zeros(len(self.tasks))
         self.performance = np.zeros(len(self.tasks))
-        self.envs_for_test = envs_for_test
         self.worst_performing_task_timestep = 1000
         self.logging = logging
 
@@ -56,11 +57,12 @@ class PerformanceTesterAndLogger:
     def dump(self):
         if self.logging:
             self.logger.dump()
+            print("Global information logged")
 
-    def performance_test(self, n_games: int, amta, ta: dict):
+    def performance_test(self, amta, ta: dict):
         min_performance = np.zeros(len(self.tasks))
         for i, task in enumerate(self.tasks):
-            self.scores[i], self.timesteps[i] = amta._play_n_game(amta.model, task, n_games, env=self.envs_for_test[task])
+            self.scores[i], self.timesteps[i] = amta.test_performance(task)
             self.performance[i] = self.scores[i] / ta[task]
             min_performance[i] = min(self.scores[i] / ta[task], 1)
         index = self.performance.argmin()

@@ -1,11 +1,13 @@
-from MultiTaskLearning import MultiTaskLearning
-import config
-from MultiTaskAgent import MultiTaskAgent
-from utils import dir_check
-import os
-from multiprocessing import cpu_count
 import git
 import argparse
+import config
+import os
+
+from utils import dir_check
+from multiprocessing import cpu_count
+
+from MultiTaskLearning import MultiTaskLearning
+from MultiTaskAgent import MultiTaskAgent
 
 
 def main(algorithm: str, selected_mti: str, policy: str, n_cpus: int, selected_gpus: str = "",
@@ -71,15 +73,15 @@ def main(algorithm: str, selected_mti: str, policy: str, n_cpus: int, selected_g
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or play a multi-task agent!')
     parser.add_argument('--algorithm', type=str, nargs='?', help='Name of the multi-task algorithm, can only be A5C or EA4C', default='A5C')
-    parser.add_argument('--mti', type=str, nargs='?', help='One of the predefined MTI see in config.py', default='mtic1')
+    parser.add_argument('--mti', type=str, nargs='?', help='One of the predefined MTI see in config.py. Only used at training', default='mtic1')
     parser.add_argument('--policy', type=str, nargs='?', help='Name of the desired policy can be ff (feed forward) or lstm', default='lstm')
-    parser.add_argument('--gpus', type=str, nargs='?', help="Selected GPUs to train on can be '0' or '0,1' etc... or '' or 'all'", default='')
+    parser.add_argument('--gpu', type=str, nargs='?', help="Selected GPUs to train on can be '0' or '0,1' etc... or '' or 'all'", default='')
     parser.add_argument('--play', help='Whether to play with the agent or train the agent', action='store_true')
     parser.add_argument('--tb_log', help='Whether you want tensorboard logging or not during training', action='store_true')
     parser.add_argument('--csv_log', help='Whether you want CSV logging or not during training', action='store_true')
-    parser.add_argument('--model', type=str, nargs='?', help='ID (name of the directory in data/model) of the model you wanto to play with or '
-                                                                                 'you want to transfer learn from', default='')
+    parser.add_argument('--model', type=str, nargs='?', help='ID (name of the directory in data/model) of the model you want to play with or '
+                                                             'you want to transfer learn from', default='')
     args = parser.parse_args()
 
     main(algorithm=args.algorithm, selected_mti=args.mti, policy=args.policy, n_cpus=cpu_count(),
-         selected_gpus=args.gpus, train=not args.play, tb_log=args.tb_log, csv_log=args.csv_log, model_id=args.model)
+         selected_gpus=args.gpu, train=not args.play, tb_log=args.tb_log, csv_log=args.csv_log, model_id=args.model)

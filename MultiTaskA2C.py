@@ -199,13 +199,14 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
         if task not in self.tasks:
             raise ValueError("Error model was not trained on the game that you are trying to predict on!")
 
+        n_env = observation.shape[0]
         if state is None:
             if self.step_model.n_lstm is not None:
-                state = np.zeros((1, 2*self.step_model.n_lstm))
+                state = np.zeros((n_env, 2*self.step_model.n_lstm))
             else:
                 state = None
         if mask is None:
-            mask = [False for _ in range(1)]
+            mask = [False for _ in range(n_env)]
 
         observation = np.array(observation)
         vectorized_env = env_utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)

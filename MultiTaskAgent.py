@@ -107,9 +107,9 @@ class MultiTaskAgent:
                                       total_timesteps=self.total_timesteps,
                                       total_training_updates=self.total_training_updates,
                                       total_episodes_learnt=self.total_episodes_learnt,
-                                      max_episode_timesteps=max_episode_timesteps,
                                       episodes_learnt=self.episodes_learnt[task],
                                       training_updates=self.training_updates[task],
+                                      max_episode_timesteps=max_episode_timesteps,
                                       policy_loss=policy_loss,
                                       value_loss=value_loss)
             self.logger.log(task, log_value)
@@ -160,7 +160,7 @@ class MultiTaskAgent:
             "total_training_updates": int(self.total_training_updates),
         })
         base_path = os.path.join(config.model_path, self.model_id)
-        id = "{:08}-{:1.2f}-{:1.2f}".format(self.model.num_timesteps, avg_performance, harmonic_performance)
+        id = "{:010}-{:1.2f}-{:1.2f}".format(self.model.num_timesteps, avg_performance, harmonic_performance)
         if not os.path.exists(base_path):
             os.mkdir(base_path)
         try:

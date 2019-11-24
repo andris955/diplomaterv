@@ -202,11 +202,11 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
 
         if state is None:
             if self.step_model.n_lstm is not None:
-                state = np.zeros((self.n_envs_per_task, 2*self.step_model.n_lstm))
+                state = np.zeros((1, 2*self.step_model.n_lstm))
             else:
                 state = None
         if mask is None:
-            mask = [False for _ in range(self.n_envs_per_task)]
+            mask = [False for _ in range(1)]
 
         observation = np.array(observation)
         vectorized_env = env_utils._is_vectorized_observation(observation, self.env_dict[task].observation_space)
@@ -365,12 +365,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         with self.graph.as_default():
             self.sess = tf_utils.make_session(graph=self.graph)
 
-            step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
+            self.step_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task, n_steps=1,
                                      reuse=False)
 
             self.trainable_variables = tf_utils.find_trainable_variables("model")  # a modell betöltéséhez kell.
-            self.step = step_model.step
-            self.value = step_model.value
+            self.step = self.step_model.step
+            self.value = self.step_model.value
 
     def setup_train_model(self, transfer=False):
         with SetVerbosity(self.verbose):

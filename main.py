@@ -72,15 +72,15 @@ def main(algorithm: str, selected_mti: str, policy: str, n_cpus: int, selected_g
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or play a multi-task agent!')
-    parser.add_argument('--algorithm', type=str, nargs='?', help='Name of the multi-task algorithm, can only be A5C or EA4C', default='A5C')
-    parser.add_argument('--mti', type=str, nargs='?', help='One of the predefined MTI see in config.py. Only used at training', default='mtic1')
-    parser.add_argument('--policy', type=str, nargs='?', help='Name of the desired policy can be ff (feed forward) or lstm', default='lstm')
-    parser.add_argument('--gpu', type=str, nargs='?', help="Selected GPUs to train on can be '0' or '0,1' etc... or '' or 'all'", default='')
+    parser.add_argument('--algorithm', type=str, nargs='?', help='Name of the multi-task algorithm, can only be A5C or EA4C. Default A5C', default='A5C')
+    parser.add_argument('--mti', type=str, nargs='?', help='One of the predefined MTI see in config.py. Only used at training. Default mtic1', default='mtic1')
+    parser.add_argument('--policy', type=str, nargs='?', help='Name of the desired policy can be ff (feed forward) or lstm. Default lstm', default='lstm')
+    parser.add_argument('--gpu', type=str, nargs='?', help="Selected GPUs to train on can be '0' or '0,1' etc... or '' or 'all'. Default ''", default='')
     parser.add_argument('--play', help='Whether to play with the agent or train the agent', action='store_true')
     parser.add_argument('--tb_log', help='Whether you want tensorboard logging or not during training', action='store_true')
     parser.add_argument('--csv_log', help='Whether you want CSV logging or not during training', action='store_true')
-    parser.add_argument('--model', type=str, nargs='?', help='ID (name of the directory in data/model) of the model you want to play with or '
-                                                             'you want to transfer learn from', default='')
+    parser.add_argument('--model', type=str, nargs='?', help="ID (name of the directory in data/model) of the model you want to play with or "
+                                                             "you want to transfer learn from. Default ''", default='')
     args = parser.parse_args()
 
     main(algorithm=args.algorithm, selected_mti=args.mti, policy=args.policy, n_cpus=cpu_count(),

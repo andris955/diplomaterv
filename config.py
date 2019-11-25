@@ -72,6 +72,7 @@ meta_lambda = 0.5
 # Nem íródnak felül transfernél de nem is kell
 seed = 3
 stdout_logging_frequency_in_train_steps = 100
+max_action_space = 18
 evaluation_frequency_in_episodes = 15
 logging_frequency_in_episodes = 5
 verbose = 1

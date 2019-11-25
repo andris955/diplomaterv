@@ -181,7 +181,9 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
         super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
-            self.pi_latent = vf_latent = feature_extractor(self.processed_obs)
+            extracted_features = feature_extractor(self.processed_obs)
+            ac_space_union = tf.nn.relu(linear(extracted_features, 'fc-union', n_hidden=config.max_action_space, init_scale=np.sqrt(2)))
+            self.pi_latent = vf_latent = ac_space_union
 
         for task in self.pdtype_dict.keys():
             with tf.variable_scope(task + "_model", reuse=reuse):
@@ -240,12 +242,13 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
             masks = batch_to_seq(self.masks_ph, self.n_steps) # n_steps x [n_env x 1]
             rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=self.n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
             latent_vector = seq_to_batch(rnn_output) # (n_steps * n_envs) x n_lstm
+            ac_space_union = tf.nn.relu(linear(latent_vector, 'fc-union', n_hidden=config.max_action_space, init_scale=np.sqrt(2)))
 
         for task in self.pdtype_dict.keys():
             with tf.variable_scope(task + "_model", reuse=reuse):
-                self.value_fn_dict[task] = linear(latent_vector, 'vf', 1)
+                self.value_fn_dict[task] = linear(ac_space_union, 'vf', 1)
                 proba_distribution, policy, q_value = self.pdtype_dict[task].\
-                    proba_distribution_from_latent(latent_vector, latent_vector, init_scale=0.01)
+                    proba_distribution_from_latent(ac_space_union, ac_space_union, init_scale=0.01)
                 self.proba_distribution_dict[task] = proba_distribution  # distribution lehet vele sample neglog entropy a policy layeren
                 self.policy_dict[task] = policy  # egy linear layer
                 self.q_value_dict[task] = q_value  # linear layer

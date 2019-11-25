@@ -108,6 +108,8 @@ data/
 .original
 original/
 proba.py
+.rl-baselines-zoo
+/rl-baselines-zoo
 
 # mypy
 .mypy_cache/

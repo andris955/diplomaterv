@@ -47,7 +47,7 @@ class PerformanceTesterAndLogger:
                 else:
                     task_name, field_type = field.split('_')
                     if field_type == 'performance':
-                        update_dict[field] = round(float(self.scores[self.tasks.index(task_name)]/self.ta[task_name]), 4)
+                        update_dict[field] = round(float(self.performance[self.tasks.index(task_name)]), 4)
                     elif field_type == 'score':
                         update_dict[field] = round(float(self.scores[self.tasks.index(task_name)]))
 
@@ -67,7 +67,7 @@ class PerformanceTesterAndLogger:
             self.performance[i] = self.scores[i] / ta[task]
             min_performance[i] = min(self.scores[i] / ta[task], 1)
         index = self.performance.argmin()
-        self.worst_performing_task_timestep = self.timesteps[index] # TODO rossz az elképzelés, nem feltétlenül a legrosszabbul teljesítőnek a legkisebb a timestepje
+        self.worst_performing_task_timestep = self.timesteps[index]
         print("Worst performing task: {} with {} timestep".format(self.tasks[index], self.worst_performing_task_timestep))
         print("-----------------------------------------------------------------")
         avg_performance = float(np.mean(min_performance))

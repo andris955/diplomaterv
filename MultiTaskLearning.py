@@ -87,9 +87,7 @@ class MultiTaskLearning:
         self.performance_logger = PerformanceTesterAndLogger(tasks=self.tasks, model_id=self.model_id, ta=self.ta, logging=logging)
 
         self.p = np.ones(len(self.tasks)) * (1 / len(self.tasks))  # Probability of training on an episode of task Ti next.
-        self.a = []  # Average scores for every task
-        for _ in range(len(self.tasks)):
-            self.a.append(0.0)
+        self.a = np.zeros(len(self.tasks))  # Average scores for every task
 
         if self.algorithm == "A5C":
             self.__A5C_init()
@@ -101,7 +99,7 @@ class MultiTaskLearning:
         for _ in range(len(self.tasks)):
             self.m.append(1.0)
 
-    def __A5C_train(self): # TODO kitesztelni
+    def __A5C_train(self):
         with SetVerbosity(self.verbose):
             while 1:
                 if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
@@ -117,11 +115,13 @@ class MultiTaskLearning:
                         self.best_avg_performance = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
+                    self.a = self.performance_logger.scores
                     for j in range(len(self.tasks)):
-                        self.a[j] = self.performance_logger.scores[j]
                         self.m[j] = max(self.ta[self.tasks[j]] - self.a[j], 0) / (self.ta[self.tasks[j]] * self.tau)  # the less the better
-                    if self.amta.total_episodes_learnt > self.uniform_policy_steps:
+                    if self.amta.total_timesteps > self.uniform_policy_steps:
                         self.p = softmax(np.asarray(self.m))
+                        print(self.tasks)
+                        print(self.p)
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 max_episode_timesteps = int(self.timestep_coeff * self.performance_logger.worst_performing_task_timestep)
                 self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps=max_episode_timesteps)
@@ -149,9 +149,8 @@ class MultiTaskLearning:
                         self.best_avg_performance = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
-                    for j in range(len(self.tasks)):
-                        self.a[j] = self.performance_logger.scores[j]
-                    s_avg_norm = [self.a[i] / self.ta[self.tasks[i]] for i in range(len(self.a))]
+                    self.a = self.performance_logger.scores
+                    s_avg_norm = list(self.performance_logger.performance)
                     s_avg_norm.sort()
                     s_min_l = s_avg_norm[0:self.l]
                 max_episode_timesteps = int(self.timestep_coeff * self.performance_logger.worst_performing_task_timestep)

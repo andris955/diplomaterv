@@ -214,6 +214,7 @@ class ActorCriticMultitaskRLModel(BaseMultitaskRLModel):
             observation = np.zeros((1,) + observation.shape)
 
         actions, value, state, neglogp = self.step(task, observation, state, mask, deterministic=deterministic)
+        actions = np.clip(actions, 0, self.action_space_dict[task].n-1)
 
         if not vectorized_env:
             if state is not None:
@@ -394,39 +395,70 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     train_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task,
                                               self.n_steps, reuse=True)
 
-                with tf.variable_scope("loss", reuse=False):
-                    self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
-                    self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
-                    self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
-                    self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+                if self.policy_name.split('_')[0] == 'diff':
+                    with tf.variable_scope("loss", reuse=False):
+                        self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
+                        self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
+                        self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
+                        self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
-                    neglogpac = {}
-                    losses = {}
+                        neglogpac = {}
+                        losses = {}
+                        for task in self.tasks:
+                            neglogpac[task] = train_model.proba_distribution_dict[task].neglogp(self.actions_ph)
+                            self.entropy[task] = tf.reduce_mean(train_model.proba_distribution_dict[task].entropy())
+                            self.pg_loss[task] = tf.reduce_mean(self.advs_ph * neglogpac[task])  # policy gradient loss
+                            self.vf_loss[task] = mse(tf.squeeze(train_model.value_fn_dict[task]), self.rewards_ph)
+                            losses[task] = self.pg_loss[task] - self.entropy[task] * self.ent_coef + self.vf_loss[task] * self.vf_coef
+
+                            tf.summary.scalar(task + '_policy_gradient_loss', self.pg_loss[task])
+                            tf.summary.scalar(task + '_value_function_loss', self.vf_loss[task])
+
+                    with tf.variable_scope("input_info", reuse=False):
+                        tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
+
+                    optimizers = {}
+                    grads_and_vars = {}
+                    self.apply_backprop = {}
                     for task in self.tasks:
-                        neglogpac[task] = train_model.proba_distribution_dict[task].neglogp(self.actions_ph)
-                        self.entropy[task] = tf.reduce_mean(train_model.proba_distribution_dict[task].entropy())
-                        self.pg_loss[task] = tf.reduce_mean(self.advs_ph * neglogpac[task])  # policy gradient loss
-                        self.vf_loss[task] = mse(tf.squeeze(train_model.value_fn_dict[task]), self.rewards_ph)
-                        losses[task] = self.pg_loss[task] - self.entropy[task] * self.ent_coef + self.vf_loss[task] * self.vf_coef
+                        optimizers[task] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
+                        grads_and_vars[task] = optimizers[task].compute_gradients(losses[task])
+                        if self.max_grad_norm is not None:
+                            grads = [grad for grad, var in grads_and_vars[task]]
+                            vars = [var for grad, var in grads_and_vars[task]]
+                            clipped_grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
+                            grads_and_vars[task] = list(zip(clipped_grads, vars))
+                        self.apply_backprop[task] = optimizers[task].apply_gradients(grads_and_vars[task])
+                else:
+                    with tf.variable_scope("loss", reuse=False):
+                        self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
+                        self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
+                        self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
+                        self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
-                        tf.summary.scalar(task + '_policy_gradient_loss', self.pg_loss[task])
-                        tf.summary.scalar(task + '_value_function_loss', self.vf_loss[task])
+                        for task in self.tasks:
+                            neglogpac = train_model.proba_distribution.neglogp(self.actions_ph)
+                            self.entropy[task] = tf.reduce_mean(train_model.proba_distribution.entropy())
+                            self.pg_loss[task] = tf.reduce_mean(self.advs_ph * neglogpac)  # policy gradient loss
+                            self.vf_loss[task] = mse(tf.squeeze(train_model.value_fn), self.rewards_ph)
+                        loss = self.pg_loss[self.tasks[0]] - self.entropy[self.tasks[0]] * self.ent_coef + self.vf_loss[self.tasks[0]] * self.vf_coef
 
-                with tf.variable_scope("input_info", reuse=False):
-                    tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
+                        tf.summary.scalar('policy_gradient_loss', self.pg_loss[self.tasks[0]])
+                        tf.summary.scalar('value_function_loss', self.vf_loss[self.tasks[0]])
 
-                optimizers = {}
-                grads_and_vars = {}
-                self.apply_backprop = {}
-                for task in self.tasks:
-                    optimizers[task] = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
-                    grads_and_vars[task] = optimizers[task].compute_gradients(losses[task])
+                    with tf.variable_scope("input_info", reuse=False):
+                        tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
+
+                    self.apply_backprop = {}
+                    optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
+                    grads_and_vars = optimizer.compute_gradients(loss)
                     if self.max_grad_norm is not None:
-                        grads = [grad for grad, var in grads_and_vars[task]]
-                        vars = [var for grad, var in grads_and_vars[task]]
+                        grads = [grad for grad, var in grads_and_vars]
+                        vars = [var for grad, var in grads_and_vars]
                         clipped_grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
-                        grads_and_vars[task] = list(zip(clipped_grads, vars))
-                    self.apply_backprop[task] = optimizers[task].apply_gradients(grads_and_vars[task])
+                        grads_and_vars = list(zip(clipped_grads, vars))
+                    for task in self.tasks:
+                        self.apply_backprop[task] = optimizer.apply_gradients(grads_and_vars)
 
                 self.train_model = train_model
                 self.step_model = step_model

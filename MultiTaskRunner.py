@@ -39,7 +39,7 @@ class MultiTaskA2CRunner():
         for _ in range(self.n_steps):
             actions, values, states, _ = self.model.step(self.env_name, self.obs, self.states, self.dones)
             if isinstance(self.env.action_space, gym.spaces.Discrete):
-                actions = np.clip(actions, 0, self.env.action_space.n)
+                actions = np.clip(actions, 0, self.env.action_space.n-1)
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_values.append(values)

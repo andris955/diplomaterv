@@ -69,7 +69,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train or play a multi-task agent!')
     parser.add_argument('--algorithm', type=str, nargs='?', help='Name of the multi-task algorithm, can only be A5C or EA4C. Default A5C', default='A5C')
     parser.add_argument('--mti', type=str, nargs='?', help='One of the predefined MTI see in config.py. Only used at training. Default mtic1', default='mtic1')
-    parser.add_argument('--policy', type=str, nargs='?', help='Name of the desired policy can be ff (feed forward) or lstm. Default lstm', default='lstm')
+    parser.add_argument('--policy', type=str, nargs='?', help='Name of the desired policy can be diff_ff, ff (feed forward) or diff_lstm, lstm. Default diff_lstm', default='diff_lstm')
     parser.add_argument('--play', help='Whether to play with the agent or train the agent', action='store_true')
     parser.add_argument('--tb_log', help='Whether you want tensorboard logging or not during training', action='store_true')
     parser.add_argument('--csv_log', help='Whether you want CSV logging or not during training', action='store_true')

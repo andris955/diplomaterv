@@ -66,9 +66,6 @@ class PerformanceTesterAndLogger:
             self.scores[i], self.timesteps[i] = amta.test_performance(task)
             self.performance[i] = self.scores[i] / ta[task]
             min_performance[i] = min(self.scores[i] / ta[task], 1)
-        index = self.performance.argmin()
-        self.worst_performing_task_timestep = self.timesteps[index]
-        print("Worst performing task: {} with {} timestep".format(self.tasks[index], self.worst_performing_task_timestep))
         print("-----------------------------------------------------------------")
         avg_performance = float(np.mean(min_performance))
         harmonic_performance = float(hmean(min_performance))

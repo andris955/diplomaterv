@@ -25,7 +25,6 @@ class MultiTaskLearning:
             self.model_id = model_id
             self.algorithm = params['multitask_algorithm']
             n_steps = params['n_steps']
-            self.timestep_coeff = params['timestep_coeff']
             self.uniform_policy_steps = params["uniform_policy_steps"]  # Number of tasks to consider in the computation of r2.
             n_episodes = params["number_of_episodes_for_estimating"]  # Number of episodes which are used for estimating current performance in any task Ti
             if n_episodes > n_cpus:
@@ -43,7 +42,6 @@ class MultiTaskLearning:
                 raise ValueError("algorithm can only be A5C or EA4C.")
             now = make_date_id(datetime.datetime.now())
             n_steps = config.n_steps
-            self.timestep_coeff = config.timestep_coeff
             self.model_id = self.algorithm + "_" + now
             self.tau = config.tau  # Temperature hyper-parameter of the softmax task-selection non-parametric policy
             self.uniform_policy_steps = config.uniform_policy_steps  # Number of tasks to consider in the computation of r2.
@@ -72,7 +70,6 @@ class MultiTaskLearning:
             'tasks': self.tasks,
             "seed": config.seed,
             "model_id": self.model_id,
-            "timestep_coeff": self.timestep_coeff,
             "lambda": self.lambda_,
             "uniform_policy_steps": self.uniform_policy_steps,
             "number_of_episodes_for_estimating": n_episodes,
@@ -123,8 +120,7 @@ class MultiTaskLearning:
                         print(self.tasks)
                         print(self.p)
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-                max_episode_timesteps = int(self.timestep_coeff * self.performance_logger.worst_performing_task_timestep)
-                self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps=max_episode_timesteps)
+                self.amta.train_for_one_episode(self.tasks[j])
 
     def __EA4C_init(self, meta_n_steps):
         self.l = len(self.tasks) // 2
@@ -153,8 +149,7 @@ class MultiTaskLearning:
                     s_avg_norm = list(self.performance_logger.performance)
                     s_avg_norm.sort()
                     s_min_l = s_avg_norm[0:self.l]
-                max_episode_timesteps = int(self.timestep_coeff * self.performance_logger.worst_performing_task_timestep)
-                self.amta.train_for_one_episode(self.tasks[j], max_episode_timesteps)
+                self.amta.train_for_one_episode(self.tasks[j])
                 r1 = 1 - self.a[j] / self.amta.episodes_learnt[self.tasks[j]]
                 r2 = 1 - np.mean(np.clip(s_min_l, 0, 1))
                 reward = self.lambda_ * r1 + (1 - self.lambda_) * r2

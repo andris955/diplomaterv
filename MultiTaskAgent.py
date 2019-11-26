@@ -100,16 +100,15 @@ class MultiTaskAgent:
             self.runners[task] = MultiTaskA2CRunner(task, self.learning_envs[task],
                                                     self.model, n_steps=self.n_steps, gamma=0.99)
 
-    def train_for_one_episode(self, task: str, max_episode_timesteps: int):
+    def train_for_one_episode(self, task: str):
         runner = self.runners[task]
         episode_score, policy_loss, value_loss, episodes_training_updates = \
-            self.model.multi_task_learn_for_one_episode(task, runner, max_episode_timesteps, self.writer)
+            self.model.multi_task_learn_for_one_episode(task, runner, self.writer)
         self.total_timesteps = self.model.num_timesteps
         self.episodes_learnt[task] += 1
         self.total_episodes_learnt += 1
         self.total_training_updates += int(episodes_training_updates)
         self.training_updates[task] += int(episodes_training_updates)
-        print("Max episode timesteps: {}".format(max_episode_timesteps))
         print("{} episodes learnt: {}".format(task, self.episodes_learnt[task]))
         print("Total episodes learnt: {}".format(self.total_episodes_learnt))
         if self.logging and self.episodes_learnt[task] % config.logging_frequency_in_episodes == 0:
@@ -122,7 +121,6 @@ class MultiTaskAgent:
                                       total_episodes_learnt=self.total_episodes_learnt,
                                       episodes_learnt=self.episodes_learnt[task],
                                       training_updates=self.training_updates[task],
-                                      max_episode_timesteps=max_episode_timesteps,
                                       policy_loss=policy_loss,
                                       value_loss=value_loss)
             self.logger.log(task, log_value)

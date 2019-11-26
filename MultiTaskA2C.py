@@ -287,7 +287,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
     :param vf_coef: (float) Value function coefficient for the loss calculation
-    :param ent_coef: (float) Entropy coefficient for the loss caculation
+    :param ent_coef: (float) Entropy coefficient for the loss calculation
     :param max_grad_norm: (float) The maximum value for the gradient clipping
     :param learning_rate: (float) The learning rate
     :param alpha: (float)  RMSProp decay parameter (default: 0.99)
@@ -303,7 +303,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     """
 
     def __init__(self, policy: str, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', tensorboard_log=None,
+                 learning_rate=1e-3, alpha=1e-3, epsilon=1e-5, lr_schedule='linear', tensorboard_log=None,
                  _init_setup_model=True, full_tensorboard_log=False):
 
         super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, _init_setup_model=_init_setup_model)
@@ -493,13 +493,12 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
 
         return policy_loss, value_loss, policy_entropy
 
-    def multi_task_learn_for_one_episode(self, task: str, runner: MultiTaskA2CRunner, max_episode_timesteps: int, writer: TensorboardWriter):
+    def multi_task_learn_for_one_episode(self, task: str, runner: MultiTaskA2CRunner, writer: TensorboardWriter):
         """
         Trains until game over.
 
         :param task: (str) name of the game
         :param runner: (MultiTaskA2CRunnner)
-        :param max_episode_timesteps: (int)
         :param writer: (TensorboardWriter)
         :return:
         """
@@ -514,7 +513,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         all_process_ended = False
         tmp_scores = np.zeros(self.n_batch)
 
-        while not (all_process_ended or episode_timesteps >= max_episode_timesteps):
+        while not all_process_ended:
             t_start = time.time()
             # self.updates = self.num_timesteps // self.n_batch + 1
             self.total_train_steps += 1
@@ -550,14 +549,9 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                 logger.record_tabular("explained_variance", float(explained_var))
                 logger.dump_tabular()
 
-        print("Any game over: {}".format(any(mask)))
-        print("All game over: {}".format(all_process_ended))
+        print("Game over: {}".format(all_process_ended))
 
-        indexes = np.where(episode_scores > 0)
-        if indexes != np.asarray([]):
-            episode_score = np.mean(episode_scores[indexes])  # only average those that are non zero
-        else:
-            episode_score = np.max(tmp_scores)
+        episode_score = np.mean(episode_scores)
 
         return episode_score, policy_loss, value_loss, episode_training_updates
 

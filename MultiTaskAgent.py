@@ -6,6 +6,8 @@ import copy
 import numpy as np
 
 from env_utils import make_atari_env
+from scipy.stats import hmean
+
 
 from Logger import Logger
 from utils import CustomMessengerClass
@@ -149,9 +151,9 @@ class MultiTaskAgent:
             all_done = all(mask)
             timesteps += np.ones(n_env) * (1 - mask)
             sum_reward += reward * (1 - mask)
-        sum_reward = int(np.mean(sum_reward))
         if sum_reward == 0:  # harmonic mean needs greater than zero elements
             sum_reward = 0.1
+        sum_reward = int(hmean(sum_reward))
         timesteps = int(np.mean(timesteps))
         duration = int(time.time()-start)
         print(task)

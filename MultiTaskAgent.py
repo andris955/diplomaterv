@@ -8,12 +8,11 @@ import numpy as np
 from env_utils import make_atari_env
 from scipy.stats import hmean
 
-
 from Logger import Logger
 from utils import CustomMessengerClass
 from MultiTaskA2C import MultitaskA2C
 from MultiTaskRunner import MultiTaskA2CRunner
-
+from stable_baselines.common.vec_env import VecVideoRecorder
 
 class MultiTaskAgent:
     def __init__(self, model_id: str, policy: str, tasks: list, n_steps: int, n_cpus: int, n_episodes: int, tensorboard_logging, logging, env_kwargs):
@@ -151,8 +150,9 @@ class MultiTaskAgent:
             all_done = all(mask)
             timesteps += np.ones(n_env) * (1 - mask)
             sum_reward += reward * (1 - mask)
-        if sum_reward == 0:  # harmonic mean needs greater than zero elements
-            sum_reward = 0.1
+        for i in range(sum_reward.shape[0]):
+            if sum_reward[i] == 0:  # harmonic mean needs greater than zero elements
+                sum_reward[i] = 0.1
         sum_reward = int(hmean(sum_reward))
         timesteps = int(np.mean(timesteps))
         duration = int(time.time()-start)
@@ -162,8 +162,11 @@ class MultiTaskAgent:
         return sum_reward, timesteps
 
     @staticmethod
-    def _play_n_game(model, task: str, n_games: int, display=False):
+    def _play_n_game(model, task: str, n_games: int, display=False, record=False):
         env = model.env_dict[task]
+        if record:
+            env =VecVideoRecorder(env, './data/videos/', record_video_trigger=lambda x: x == 0, video_length=10_000,
+                                  name_prefix="trained-agent-{}".format(task))
         timesteps = 0
         sum_reward = 0
         for i in range(n_games):
@@ -186,11 +189,11 @@ class MultiTaskAgent:
         return sum_reward, timesteps
 
     @staticmethod
-    def play(model_id, n_games=1, display=True):
+    def play(model_id, n_games=1, display=True, record=False):
         model, tasks = MultitaskA2C.load(model_id)
         for task in tasks:
             print(task)
-            sum_reward, timesteps = MultiTaskAgent._play_n_game(model, task, n_games, display)
+            sum_reward, timesteps = MultiTaskAgent._play_n_game(model, task, n_games, display, record)
             print("Achieved score: {}".format(sum_reward))
             print("Timesteps: {}".format(timesteps))
             print("Relative performance: {}%".format(round(sum_reward/config.target_performances[task], 2)*100))

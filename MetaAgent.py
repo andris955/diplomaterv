@@ -5,6 +5,7 @@ import utils
 import config
 from stable_baselines import logger
 from utils import read_params
+from collections import deque
 
 
 class MetaAgent:
@@ -23,12 +24,11 @@ class MetaAgent:
             self.n_steps = n_steps
             self.meta_learner = MetaA2CModel(self.input_len, self.output_len, self.n_steps)
 
-        self.inputs = [np.zeros(self.input_len)] * self.n_steps
+        self.inputs = deque([np.zeros(self.input_len)] * self.n_steps, maxlen=self.n_steps)
         self.train_step = 0
 
     def sample(self, game_input):
         self.inputs.append(game_input)
-        self.inputs.pop(0)
         flat_param, value, neglogp = self.meta_learner.step(input_state=np.asarray(self.inputs))
         prob_dist = utils.softmax(flat_param[0, :])
         return prob_dist, value, neglogp

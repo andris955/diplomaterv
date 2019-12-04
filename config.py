@@ -14,9 +14,9 @@ MTI7 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0
 
 MTIC1 = ['SpaceInvaders-v0', 'Seaquest-v0', 'CrazyClimber-v0']  # különböző, de jó
 
-MTIC2 = ['SpaceInvaders-v0', 'Assault-v0', 'DemonAttack-v0']  # hasonló (1D-ben mozog és lő), de rossz
+MTIC2 = ['SpaceInvaders-v0', 'Assault-v0', 'DemonAttack-v0']  # hasonló (1D-ben mozog és lő)
 
-MTIC3 = ['Seaquest-v0', 'StarGunner-v0', 'ChopperCommand-v0']  # hasonló (2D-ben mozog és lő)
+MTIC3 = ['Seaquest-v0', 'StarGunner-v0', 'ChopperCommand-v0']  # hasonló (2D-ben mozog és lő), de rossz
 
 
 target_performances = {

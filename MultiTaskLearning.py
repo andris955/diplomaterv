@@ -3,6 +3,7 @@ import datetime
 import numpy as np
 
 from utils import one_hot, read_params, softmax, make_date_id
+from collections import deque
 
 from stable_baselines.common import SetVerbosity
 from MultiTaskAgent import MultiTaskAgent
@@ -130,7 +131,22 @@ class MultiTaskLearning:
         with SetVerbosity(self.verbose):
             action = j = 0
             value = np.array([0])
+            s = [deque([0]*3, maxlen=3)]*len(self.tasks)
             while 1:
+                score = self.amta.train_for_one_episode(self.tasks[j])
+                s[j].append(score)
+                s_avg_norm = [np.mean(s[i])/self.ta[self.tasks[i]] for i in range(len(self.tasks))]
+                s_avg_norm.sort()
+                s_min_l = s_avg_norm[0:self.l]
+                r1 = 1 - np.mean(s[j]) / self.ta[self.tasks[j]]
+                r2 = np.mean(np.clip(s_min_l, 0, 1))
+                reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
+                self.ma.train(action, value, reward)
+                self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(
+                    [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
+                     one_hot(j, len(self.tasks))]))  # Input 3*len(tasks)
+                action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+
                 if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
@@ -145,19 +161,18 @@ class MultiTaskLearning:
                         self.best_avg_performance = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
-                    self.a = self.performance_logger.scores
                     s_avg_norm = list(self.performance_logger.performance)
                     s_avg_norm.sort()
                     s_min_l = s_avg_norm[0:self.l]
-                self.amta.train_for_one_episode(self.tasks[j])
-                r1 = 1 - self.a[j] / self.amta.episodes_learnt[self.tasks[j]]
-                r2 = np.mean(np.clip(s_min_l, 0, 1))
-                reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
-                self.ma.train(action, value, reward)
-                self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(
-                    [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
-                     one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
-                action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+                    r1 = 1 - self.performance_logger.performance[j]
+                    r2 = np.mean(np.clip(s_min_l, 0, 1))
+                    reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
+                    self.ma.train(action, value, reward)
+                    self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(
+                        [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
+                         one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
+                    action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+
 
     def train(self):
         if self.algorithm == "A5C":

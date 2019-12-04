@@ -33,8 +33,8 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.99, vf_coef=0.25, ent_coef=0.01,
-                 max_grad_norm=0.5, learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
+    def __init__(self, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.8, vf_coef=0.25, ent_coef=0,
+                 max_grad_norm=0.5, learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmActorCriticPolicy
         self.verbose = verbose
@@ -63,13 +63,10 @@ class MetaA2CModel:
         self.vf_loss = None
         self.entropy = None
         self.apply_backprop = None
+        self.policy_model = None
         self.step = None
-        self.proba_step = None
         self.value = None
-        self.initial_state = None
         self.learning_rate_schedule = None
-        self.summary = None
-        self.episode_reward = None
         self.trainable_variables = None
 
         self.layers = config.meta_layers
@@ -112,21 +109,11 @@ class MetaA2CModel:
                 self.vf_loss = mse(tf.squeeze(policy_model.value_fn), self.rewards_ph)
                 loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
 
-                tf.summary.scalar('entropy_loss', self.entropy)
-                tf.summary.scalar('policy_gradient_loss', self.pg_loss)
-                tf.summary.scalar('value_function_loss', self.vf_loss)
-                tf.summary.scalar('loss', loss)
-
                 self.trainable_variables = tf_utils.find_trainable_variables("model")
                 grads = tf.gradients(loss, self.trainable_variables)
                 if self.max_grad_norm is not None:
                     grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
                 grads = list(zip(grads, self.trainable_variables))
-
-            with tf.variable_scope("input_info", reuse=False):
-                tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
-                tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate))
-                tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
 
             trainer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha,
                                                 epsilon=self.epsilon)
@@ -134,7 +121,6 @@ class MetaA2CModel:
             self.step = policy_model.step
             self.policy_model = policy_model
             self.value = self.policy_model.value
-            self.initial_state = self.policy_model.initial_state
             tf.global_variables_initializer().run(session=self.sess)
 
     def train_step(self, inputs: np.ndarray, rewards, actions, values):
@@ -182,7 +168,6 @@ class MetaA2CModel:
         json_params = {
             "input_length": self.input_length,
             "output_length": self.output_length,
-            "state_shape": self.initial_state.shape,
             "n_steps": self.n_steps,
             "total_timesteps": self.total_timesteps,
             "gamma": self.gamma,

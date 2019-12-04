@@ -22,7 +22,6 @@ class MetaLstmActorCriticPolicy:
         self.q_value = None
         self.proba_distribution = None
         self.value_fn = None
-        self.initial_state = None
 
         self.__setup_model()
 
@@ -62,8 +61,6 @@ class MetaLstmActorCriticPolicy:
         self.action = self.proba_distribution.sample()
         self.neglogp = self.proba_distribution.neglogp(self.action)
         self._value = self.value_fn[:, 0]
-
-        self.initial_state = np.zeros((self.n_steps, self.input_length), dtype=np.float32)
 
     def step(self, input_state: np.ndarray):
         flat_param, value, neglogp = self.sess.run([self.flat_param, self._value, self.neglogp], {self.input_ph: input_state})

@@ -151,7 +151,7 @@ class MultiTaskLearning:
                     s_min_l = s_avg_norm[0:self.l]
                 self.amta.train_for_one_episode(self.tasks[j])
                 r1 = 1 - self.a[j] / self.amta.episodes_learnt[self.tasks[j]]
-                r2 = 1 - np.mean(np.clip(s_min_l, 0, 1))
+                r2 = np.mean(np.clip(s_min_l, 0, 1))
                 reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
                 self.ma.train(action, value, reward)
                 self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(

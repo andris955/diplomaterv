@@ -302,8 +302,8 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy: str, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=1e-3, alpha=1e-3, epsilon=1e-5, lr_schedule='linear', tensorboard_log=None,
+    def __init__(self, policy: str, env_dict, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.02, max_grad_norm=0.5,
+                 learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', tensorboard_log=None,
                  _init_setup_model=True, full_tensorboard_log=False):
 
         super(MultitaskA2C, self).__init__(policy=policy, env_dict=env_dict, _init_setup_model=_init_setup_model)

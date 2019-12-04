@@ -54,7 +54,7 @@ target_performances = {
 
 number_of_episodes_for_estimating = 3  # Shouldnt be greater than number of cpus
 uniform_policy_steps = 4_000_000  # Number of time steps for which a uniformly random policy is executed for task selection. At the end of l training steps, the agent must have learned on ≥ n
-max_timesteps = 300_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe.
+max_timesteps = 150_000_000  # k x 50_000_000 time stepig futott az eredeti cikkbe.
 n_steps = 10
 tau = 0.05
 

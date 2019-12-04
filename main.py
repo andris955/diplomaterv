@@ -6,24 +6,23 @@ import os
 from utils import dir_check
 from multiprocessing import cpu_count
 
-from MultiTaskLearning import MultiTaskLearning
-from MultiTaskAgent import MultiTaskAgent
 
-
-def main(algorithm: str, selected_mti: str, policy: str, n_cpus: int, selected_gpus: str = "",
-         train: bool = True, tb_log: bool = False, csv_log: bool = True, model_id: str = None):
+def main(algorithm: str, selected_mti: str, policy: str, train: bool = True,
+         tb_log: bool = False, csv_log: bool = True, model_id: str = None):
     """
     :param algorithm: (str) 'A5C' or 'EA4C'
     :param selected_mti: (str) Name of the multi-task instance
      ['SpaceInvaders-v0', 'CrazyClimber-v0', 'Seaquest-v0', 'DemonAttack-v0', 'StarGunner-v0']'
     :param policy: (str) 'lstm' or 'ff' (feed forward)
-    :param n_cpus: (int) number of the virtual cpus.
-    :param selected_gpus: (str) the selected gpu ids eg.: '' or '0' or '0,1' or 'all'
     :param train: (bool) Whether to train or play
     :param tb_log: (bool) Whether to create tensorboard log or not. WARNING: IT LEAKS MEMORY IF IT IS TRUE
     :param csv_log: (bool) Whether or not to save results in csv files
     :param model_id: (str) or None Name of the model's directory which trying to load either for transfer learning or playing.
     """
+
+    from MultiTaskLearning import MultiTaskLearning
+    from MultiTaskAgent import MultiTaskAgent
+
     if isinstance(selected_mti, str):
         if selected_mti.lower() == 'mti1':
             selected_mti = config.MTI1
@@ -48,11 +47,8 @@ def main(algorithm: str, selected_mti: str, policy: str, n_cpus: int, selected_g
         else:
             selected_mti = config.MTIC1
 
-    if selected_gpus != "all":
-        if "CUDA_DEVICE_ORDER" in os.environ.keys() and "CUDA_VISIBLE_DEVICES" in os.environ.keys():
-            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-            os.environ["CUDA_VISIBLE_DEVICES"] = selected_gpus
     if train:
+        n_cpus = cpu_count()
         dir_check()
         if tb_log:
             print("WARNING: TENSORBOARD LOGGING ACTIVE -> IT LEAKS MEMORY")
@@ -83,5 +79,10 @@ if __name__ == '__main__':
                                                              "you want to transfer learn from. Default ''", default='')
     args = parser.parse_args()
 
-    main(algorithm=args.algorithm, selected_mti=args.mti, policy=args.policy, n_cpus=cpu_count(),
-         selected_gpus=args.gpu, train=not args.play, tb_log=args.tb_log, csv_log=args.csv_log, model_id=args.model)
+    if args.gpu != "all":
+        if "CUDA_DEVICE_ORDER" in os.environ.keys() and "CUDA_VISIBLE_DEVICES" in os.environ.keys():
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+            os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+
+    main(algorithm=args.algorithm, selected_mti=args.mti, policy=args.policy,
+         train=not args.play, tb_log=args.tb_log, csv_log=args.csv_log, model_id=args.model)

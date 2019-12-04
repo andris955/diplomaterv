@@ -26,7 +26,7 @@ class PerformanceTesterAndLogger:
             tasks_score = [task + "_score" for task in tasks]
             tasks_performance = [task + "_performance" for task in tasks]
             interleaved_task_logvalues = [val for pair in zip(tasks_score, tasks_performance) for val in pair]
-            log_values = "elapsed_time timestep " + " ".join(interleaved_task_logvalues)
+            log_values = "elapsed_time total_timesteps " + " ".join(interleaved_task_logvalues)
             self.log_value_list = log_values.split(" ")
             self.logvalue = CustomMessengerClass
             self.name = "GlobalPerformance"

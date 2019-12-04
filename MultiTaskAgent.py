@@ -151,8 +151,8 @@ class MultiTaskAgent:
             timesteps += np.ones(n_env) * (1 - mask)
             sum_reward += reward * (1 - mask)
         for i in range(sum_reward.shape[0]):
-            if sum_reward[i] == 0:  # harmonic mean needs greater than zero elements
-                sum_reward[i] = 0.1
+            if sum_reward[i] < 1:  # harmonic mean needs greater than zero elements
+                sum_reward[i] = 1
         sum_reward = int(hmean(sum_reward))
         timesteps = int(np.mean(timesteps))
         duration = int(time.time()-start)

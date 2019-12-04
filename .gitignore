@@ -110,6 +110,7 @@ original/
 proba.py
 .rl-baselines-zoo
 /rl-baselines-zoo
+create_fig.py
 
 # mypy
 .mypy_cache/

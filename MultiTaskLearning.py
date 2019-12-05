@@ -3,7 +3,6 @@ import datetime
 import numpy as np
 
 from utils import one_hot, read_params, softmax, make_date_id
-from collections import deque
 
 from stable_baselines.common import SetVerbosity
 from MultiTaskAgent import MultiTaskAgent
@@ -34,7 +33,7 @@ class MultiTaskLearning:
             self.lambda_ = params['lambda']
             self.tau = params['tau']
             env_kwargs = params['env_kwargs']
-            meta_n_steps = params['meta_n_steps']
+            self.meta_n_steps = params['meta_n_steps']
         else:
             self.tasks = tasks
             if algorithm == "EA4C" or algorithm == "A5C":
@@ -51,7 +50,7 @@ class MultiTaskLearning:
                 n_episodes = n_cpus
                 print("Number of episodes for estimating is overwritten by the number of cpus")
             self.lambda_ = config.meta_lambda
-            meta_n_steps = config.meta_n_steps
+            self.meta_n_steps = config.evaluation_frequency_in_episodes
             env_kwargs = {
                 'episode_life': True,
                 'clip_rewards': True,
@@ -76,7 +75,8 @@ class MultiTaskLearning:
             "number_of_episodes_for_estimating": n_episodes,
             "best_avg_performance": self.best_avg_performance,
             "best_harmonic_performance": self.best_harmonic_performance,
-            "meta_n_steps": meta_n_steps,
+            "meta_n_steps": self.meta_n_steps,
+            "evaluation_frequency_in_episodes": config.evaluation_frequency_in_episodes,
             "tau": self.tau,
             'env_kwargs': env_kwargs
         })
@@ -90,7 +90,7 @@ class MultiTaskLearning:
         if self.algorithm == "A5C":
             self.__A5C_init()
         elif self.algorithm == "EA4C":
-            self.__EA4C_init(meta_n_steps)
+            self.__EA4C_init()
 
     def __A5C_init(self):
         self.m = []
@@ -123,34 +123,17 @@ class MultiTaskLearning:
                 j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 self.amta.train_for_one_episode(self.tasks[j])
 
-    def __EA4C_init(self, meta_n_steps):
+    def __EA4C_init(self):
         self.l = len(self.tasks) // 2
-        self.ma = MetaAgent(self.model_id, meta_n_steps, 3 * len(self.tasks), len(self.tasks))
+        self.ma = MetaAgent(self.model_id, self.meta_n_steps, 3 * len(self.tasks), len(self.tasks))
 
     def __EA4C_train(self):
         with SetVerbosity(self.verbose):
-            action = j = 0
-            value = np.array([0])
-            s = [deque([0]*3, maxlen=3)]*len(self.tasks)
             while 1:
-                score = self.amta.train_for_one_episode(self.tasks[j])
-                s[j].append(score)
-                s_avg_norm = [np.mean(s[i])/self.ta[self.tasks[i]] for i in range(len(self.tasks))]
-                s_avg_norm.sort()
-                s_min_l = s_avg_norm[0:self.l]
-                r1 = 1 - np.mean(s[j]) / self.ta[self.tasks[j]]
-                r2 = np.mean(np.clip(s_min_l, 0, 1))
-                reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
-                self.ma.train(action, value, reward)
-                self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(
-                    [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
-                     one_hot(j, len(self.tasks))]))  # Input 3*len(tasks)
-                action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-
-                if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
+                if self.amta.total_episodes_learnt % self.meta_n_steps == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
-                    if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
+                    if self.amta.total_episodes_learnt % (self.meta_n_steps*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
@@ -164,15 +147,19 @@ class MultiTaskLearning:
                     s_avg_norm = list(self.performance_logger.performance)
                     s_avg_norm.sort()
                     s_min_l = s_avg_norm[0:self.l]
-                    r1 = 1 - self.performance_logger.performance[j]
                     r2 = np.mean(np.clip(s_min_l, 0, 1))
-                    reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
-                    self.ma.train(action, value, reward)
-                    self.p, value, neglogp = self.ma.sample(game_input=np.concatenate(
-                        [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
-                         one_hot(j, len(self.tasks))])) # Input 3*len(tasks)
-                    action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
-
+                    # mint a játékoknál a runner egy menetet változatlan súllyal játszik és itt a "súly" a kiértékelés eredménye.
+                    self.ma.train()
+                action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
+                self.amta.train_for_one_episode(self.tasks[j])
+                r1 = 1 - self.performance_logger.performance[j]
+                print("r1: {}".format(r1))
+                print("r2: {}".format(r2))
+                reward = self.lambda_ * r1 + (1 - self.lambda_) * r2
+                game_input = np.concatenate(
+                    [np.asarray(list(self.amta.episodes_learnt.values())) / np.sum(np.asarray(list(self.amta.episodes_learnt.values()))), self.p,
+                     one_hot(j, len(self.tasks))])  # Input 3*len(tasks)
+                self.p, value, neglogp = self.ma.sample(game_input=game_input, action=action, reward=reward)
 
     def train(self):
         if self.algorithm == "A5C":

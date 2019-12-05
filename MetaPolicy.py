@@ -8,10 +8,11 @@ from stable_baselines.a2c.utils import linear
 
 
 class MetaLstmActorCriticPolicy:
-    def __init__(self, sess: tf.Session, input_length: int, output_length: int, n_steps: int, layers: list, lstm_units: int):
+    def __init__(self, sess: tf.Session, input_length: int, output_length: int, n_steps: int, window_size: int, layers: list, lstm_units: int):
         self.input_length = input_length
         self.output_length = output_length
         self.n_steps = n_steps
+        self.window_size = window_size
         assert self.n_steps > 0, "n_batch must be a positive integer!"
         self.layers = layers
         self.lstm_units = lstm_units
@@ -34,7 +35,7 @@ class MetaLstmActorCriticPolicy:
         x = None
 
         # Input
-        self.input_ph = tf.placeholder(shape=(self.n_steps, self.input_length), dtype=tf.float32, name="input_ph")
+        self.input_ph = tf.placeholder(shape=(None, self.window_size, self.input_length), dtype=tf.float32, name="input_ph")
 
         # Building the shared part of the network
         for i, layer in enumerate(self.layers):
@@ -44,7 +45,7 @@ class MetaLstmActorCriticPolicy:
                 elif i < len(self.layers) - 1:
                     x = tf.keras.layers.Dense(layer, activation='relu', name='fc_' + str(i))(x)
             elif layer == "lstm" and lstm_registered is False and i == len(self.layers)-1:
-                x = tf.keras.backend.expand_dims(x, axis=0)
+                # x = tf.keras.backend.expand_dims(x, axis=0)
                 latent_vector = tf.keras.layers.LSTM(self.lstm_units, name="lstm")(x)
                 lstm_registered = True
             else:

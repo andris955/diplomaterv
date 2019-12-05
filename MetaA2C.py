@@ -1,5 +1,4 @@
 import tensorflow as tf
-import cloudpickle
 import os
 import numpy as np
 import utils
@@ -33,7 +32,7 @@ class MetaA2CModel:
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, input_length: int, output_length: int, n_steps: int, seed=3, gamma=0.8, vf_coef=0.25, ent_coef=0,
+    def __init__(self, input_length: int, output_length: int, n_steps: int, window_size: int, seed=3, gamma=0.8, vf_coef=0.25, ent_coef=0,
                  max_grad_norm=0.5, learning_rate=1e-3, alpha=0.99, epsilon=1e-5, lr_schedule='linear', verbose=0, _init_setup_model=True):
 
         self.policy = MetaLstmActorCriticPolicy
@@ -42,6 +41,7 @@ class MetaA2CModel:
         self.output_length = output_length
         self.num_train_steps = 0
         self.n_steps = n_steps
+        self.window_size = window_size
         self.total_timesteps = config.max_timesteps/100
 
         self.gamma = gamma
@@ -95,12 +95,12 @@ class MetaA2CModel:
 
             # azért nincs step model mert ugyanaz a lépés (n_batch) így felesleges.
             policy_model = self.policy(sess=self.sess, input_length=self.input_length, output_length=self.output_length, n_steps=self.n_steps,
-                                       layers=self.layers, lstm_units=self.lstm_units)
+                                       window_size=self.window_size, layers=self.layers, lstm_units=self.lstm_units)
 
             with tf.variable_scope("loss", reuse=False):
-                self.actions_ph = policy_model.pdtype.sample_placeholder([1], name="action_ph")
-                self.advs_ph = tf.placeholder(tf.float32, [1], name="advs_ph")
-                self.rewards_ph = tf.placeholder(tf.float32, [1], name="rewards_ph")
+                self.actions_ph = policy_model.pdtype.sample_placeholder([self.n_steps], name="action_ph")
+                self.advs_ph = tf.placeholder(tf.float32, [self.n_steps], name="advs_ph")
+                self.rewards_ph = tf.placeholder(tf.float32, [self.n_steps], name="rewards_ph")
                 self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
                 neglogpac = policy_model.proba_distribution.neglogp(self.actions_ph)
@@ -123,15 +123,18 @@ class MetaA2CModel:
             self.value = self.policy_model.value
             tf.global_variables_initializer().run(session=self.sess)
 
-    def train_step(self, inputs: np.ndarray, rewards, actions, values):
+    def train_step(self, inputs: np.ndarray, discounted_rewards, actions, values):
         """
         applies a training step to the model
         """
-        advs = rewards - values
-        cur_lr = self.learning_rate_schedule.value()
+        advs = discounted_rewards - values
+
+        cur_lr = None
+        for _ in range(self.n_steps):
+            cur_lr = self.learning_rate_schedule.value()
 
         td_map = {self.policy_model.input_ph: inputs, self.actions_ph: actions, self.advs_ph: advs,
-                  self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
+                  self.rewards_ph: discounted_rewards, self.learning_rate_ph: cur_lr}
 
         policy_loss, value_loss, policy_entropy, _ = self.sess.run(
             [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
@@ -160,6 +163,7 @@ class MetaA2CModel:
             "input_length": self.input_length,
             "output_length": self.output_length,
             "n_steps": self.n_steps,
+            "window_size": self.window_size,
             "total_timesteps": self.total_timesteps,
             "layers": self.layers,
             "lstm_units": self.lstm_units,
@@ -169,6 +173,7 @@ class MetaA2CModel:
             "input_length": self.input_length,
             "output_length": self.output_length,
             "n_steps": self.n_steps,
+            "window_size": self.window_size,
             "total_timesteps": self.total_timesteps,
             "gamma": self.gamma,
             "vf_coef": self.vf_coef,
@@ -199,7 +204,7 @@ class MetaA2CModel:
             raise ValueError("The input and the output length must be the same as the model's that trying to load.")
 
         model = cls(input_length=params["input_length"], output_length=params["output_length"],
-                    n_steps=params["n_steps"], _init_setup_model=False)
+                    n_steps=params["n_steps"], window_size=params["window_size"], _init_setup_model=False)
         model.__dict__.update(params)
         model.setup_model()
 

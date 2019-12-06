@@ -21,14 +21,14 @@ class MetaAgent:
             self.input_len = params['input_length']
             self.output_len = params['output_length']
             self.n_steps = params['n_steps']
-            self.window_size = self.n_steps//3
+            self.window_size = self.n_steps//2 + 1 if self.n_steps < 15 else self.n_steps//3
             self.gamma = params['gamma']
             self.meta_learner = MetaA2CModel.load(self.model_id, self.input_len, self.output_len)
         else:
             self.input_len = input_len
             self.output_len = output_len
             self.n_steps = n_steps
-            self.window_size = self.n_steps//3
+            self.window_size = self.n_steps//2 + 1 if self.n_steps < 15 else self.n_steps//3
             self.gamma = 0.8
             self.meta_learner = MetaA2CModel(self.input_len, self.output_len, self.n_steps, window_size=self.window_size, gamma=self.gamma)
 

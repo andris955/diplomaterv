@@ -22,7 +22,7 @@ def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
 
     def make_env(rank):
         def _thunk():
-            env = gym.make(env_id, frameskip=4)
+            env = gym.make(env_id, frameskip=3)
             env = NoopResetEnv(env, noop_max=30)
             env.seed(seed + rank)
             return wrap_deepmind(env, **wrapper_kwargs)

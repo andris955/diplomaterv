@@ -42,7 +42,7 @@ class MetaA2CModel:
         self.num_train_steps = 0
         self.n_steps = n_steps
         self.window_size = window_size
-        self.total_timesteps = config.max_timesteps/100
+        self.total_timesteps = config.max_timesteps/10_000
 
         self.gamma = gamma
         self.vf_coef = vf_coef

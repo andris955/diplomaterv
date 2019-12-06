@@ -66,6 +66,7 @@ meta_layers = (100, 100, "lstm")
 meta_lstm_units = 100
 
 meta_lambda = 0.7
+meta_n_steps = 5
 
 # Nem íródnak felül transfernél de nem is kell
 seed = 3

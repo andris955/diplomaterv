@@ -50,7 +50,7 @@ class MultiTaskLearning:
                 n_episodes = n_cpus
                 print("Number of episodes for estimating is overwritten by the number of cpus")
             self.lambda_ = config.meta_lambda
-            self.meta_n_steps = config.evaluation_frequency_in_episodes
+            self.meta_n_steps = config.meta_n_steps
             env_kwargs = {
                 'episode_life': True,
                 'clip_rewards': True,
@@ -114,8 +114,8 @@ class MultiTaskLearning:
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
                     self.a = self.performance_logger.scores
-                    for j in range(len(self.tasks)):
-                        self.m[j] = max(self.ta[self.tasks[j]] - self.a[j], 0) / (self.ta[self.tasks[j]] * self.tau)  # the less the better
+                    for i in range(len(self.tasks)):
+                        self.m[i] = max(self.ta[self.tasks[i]] - self.a[i], 0) / (self.ta[self.tasks[i]] * self.tau)  # the less the better
                     if self.amta.total_timesteps > self.uniform_policy_steps:
                         self.p = softmax(np.asarray(self.m))
                         print(self.tasks)
@@ -131,9 +131,11 @@ class MultiTaskLearning:
         with SetVerbosity(self.verbose):
             while 1:
                 if self.amta.total_episodes_learnt % self.meta_n_steps == 0:
+                    self.ma.train()
+                if self.amta.total_episodes_learnt % config.evaluation_frequency_in_episodes == 0:
                     avg_performance, harmonic_performance = self.performance_logger.performance_test(amta=self.amta, ta=self.ta)
                     self.performance_logger.log(self.amta.total_timesteps)
-                    if self.amta.total_episodes_learnt % (self.meta_n_steps*5) == 0:
+                    if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
@@ -149,7 +151,6 @@ class MultiTaskLearning:
                     s_min_l = s_avg_norm[0:self.l]
                     r2 = np.mean(np.clip(s_min_l, 0, 1))
                     # mint a játékoknál a runner egy menetet változatlan súllyal játszik és itt a "súly" a kiértékelés eredménye.
-                    self.ma.train()
                 action = j = np.random.choice(np.arange(0, len(self.p)), p=self.p)
                 self.amta.train_for_one_episode(self.tasks[j])
                 r1 = 1 - self.performance_logger.performance[j]

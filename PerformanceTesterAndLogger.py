@@ -42,7 +42,7 @@ class PerformanceTesterAndLogger:
             for field in self.logobject._fields:
                 if field == "elapsed_time":
                     update_dict[field] = int(time.time()-self.start_time)
-                elif field == "timestep":
+                elif field == "total_timesteps":
                     update_dict[field] = timestep
                 else:
                     task_name, field_type = field.split('_')

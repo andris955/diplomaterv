@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import os
 import sys
 
-from MultiTaskPolicy import MultiTaskActorCriticPolicy, get_policy_from_string
+from MultiTaskPolicy import get_policy_from_string
 from MultiTaskRunner import MultiTaskA2CRunner
 from EpisodeRewardCalculator import EpisodeRewardCalculator
 
@@ -36,6 +36,7 @@ class BaseMultitaskRLModel(ABC):
 
     def __init__(self, policy_name: str, env_dict):
         self.policy_name = policy_name
+        self.policy_type = self.policy_name.split('_')[0]
         self.policy = get_policy_from_string(self.policy_name)
         self.env_dict = env_dict
         self.tasks = [key for key in self.env_dict.keys()] if self.env_dict is not None else None
@@ -362,8 +363,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
         return tbw
 
     def setup_step_model(self):
-        assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                    "instance of MultiTaskActorCriticPolicy."
 
         self.graph = tf.Graph()
         with self.graph.as_default():
@@ -379,9 +378,6 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
     def setup_train_model(self, transfer=False):
         with SetVerbosity(self.verbose):
 
-            assert issubclass(self.policy, MultiTaskActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                        "instance of MultiTaskActorCriticPolicy."
-
             self.graph = tf.Graph()
             with self.graph.as_default():
                 self.sess = tf_utils.make_session(graph=self.graph)
@@ -395,7 +391,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                     train_model = self.policy(self.sess, self.tasks, self.observation_space_dict, self.action_space_dict, self.n_envs_per_task,
                                               self.n_steps, reuse=True)
 
-                if self.policy_name.split('_')[0] == 'diff':
+                if self.policy_name.split('_')[0] == 'dodt':
                     with tf.variable_scope("loss", reuse=False):
                         self.actions_ph = tf.placeholder(dtype=tf.int32, shape=[None], name="actions_ph")
                         self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")  # advantages
@@ -436,20 +432,18 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         self.rewards_ph = tf.placeholder(tf.float32, [None], name="rewards_ph")
                         self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
-                        for task in self.tasks:
-                            neglogpac = train_model.proba_distribution.neglogp(self.actions_ph)
-                            self.entropy[task] = tf.reduce_mean(train_model.proba_distribution.entropy())
-                            self.pg_loss[task] = tf.reduce_mean(self.advs_ph * neglogpac)  # policy gradient loss
-                            self.vf_loss[task] = mse(tf.squeeze(train_model.value_fn), self.rewards_ph)
-                        loss = self.pg_loss[self.tasks[0]] - self.entropy[self.tasks[0]] * self.ent_coef + self.vf_loss[self.tasks[0]] * self.vf_coef
+                        neglogpac = train_model.proba_distribution.neglogp(self.actions_ph)
+                        self.entropy = tf.reduce_mean(train_model.proba_distribution.entropy())
+                        self.pg_loss = tf.reduce_mean(self.advs_ph * neglogpac)  # policy gradient loss
+                        self.vf_loss = mse(tf.squeeze(train_model.value_fn), self.rewards_ph)
+                        loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
 
-                        tf.summary.scalar('policy_gradient_loss', self.pg_loss[self.tasks[0]])
-                        tf.summary.scalar('value_function_loss', self.vf_loss[self.tasks[0]])
+                        tf.summary.scalar('policy_gradient_loss', self.pg_loss)
+                        tf.summary.scalar('value_function_loss', self.vf_loss)
 
                     with tf.variable_scope("input_info", reuse=False):
                         tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
 
-                    self.apply_backprop = {}
                     optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
                     grads_and_vars = optimizer.compute_gradients(loss)
                     if self.max_grad_norm is not None:
@@ -457,8 +451,7 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
                         vars = [var for grad, var in grads_and_vars]
                         clipped_grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
                         grads_and_vars = list(zip(clipped_grads, vars))
-                    for task in self.tasks:
-                        self.apply_backprop[task] = optimizer.apply_gradients(grads_and_vars)
+                    self.apply_backprop = optimizer.apply_gradients(grads_and_vars)
 
                 self.train_model = train_model
                 self.step_model = step_model
@@ -510,18 +503,31 @@ class MultitaskA2C(ActorCriticMultitaskRLModel):
             if self.full_tensorboard_log and (1 + self.total_train_steps) % 10 == 0:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]],
-                    td_map, options=run_options, run_metadata=run_metadata)
+                if self.policy_type == "dodt":
+                    summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                        [self.summary, self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]],
+                        td_map, options=run_options, run_metadata=run_metadata)
+                else:
+                    summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                        [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop],
+                        td_map, options=run_options, run_metadata=run_metadata)
                 writer.add_run_metadata(run_metadata, 'step%d' % (self.total_train_steps * (self.n_batch + 1)))
             else:
-                summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]], td_map)
+                if self.policy_type == "dodt":
+                    summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                        [self.summary, self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]], td_map)
+                else:
+                    summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                        [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
             writer.add_summary(summary, self.total_train_steps * (self.n_batch + 1))
 
         else:
-            policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]], td_map)
+            if self.policy_type == "dodt":
+                policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                    [self.pg_loss[task], self.vf_loss[task], self.entropy[task], self.apply_backprop[task]], td_map)
+            else:
+                policy_loss, value_loss, policy_entropy, _ = self.sess.run(
+                    [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
 
         return policy_loss, value_loss, policy_entropy
 

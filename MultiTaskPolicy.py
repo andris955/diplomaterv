@@ -32,16 +32,16 @@ def shared_network(scaled_images):
 
 
 def get_policy_from_string(policy: str):
-    if policy == "diff_lstm":
-        return DiffOutputMultiTaskLSTMA2CPolicy
-    elif policy == "diff_ff":
-        return DiffOutputMultiTaskFeedForwardA2CPolicy
-    elif policy == 'ff':
-        return MultiTaskFeedForwardA2CPolicy
-    elif policy == 'lstm':
-        return MultiTaskLSTMA2CPolicy
+    if policy == "dodt_lstm":
+        return DODTMultiTaskLSTMA2CPolicy
+    elif policy == "dodt_ff":
+        return DODTMultiTaskFeedForwardA2CPolicy
+    elif policy == 'codt_ff':
+        return CODTMultiTaskFeedForwardA2CPolicy
+    elif policy == 'codt_lstm':
+        return CODTMultiTaskLSTMA2CPolicy
     else:
-        return DiffOutputMultiTaskFeedForwardA2CPolicy
+        return DODTMultiTaskFeedForwardA2CPolicy
 
 
 class BaseMultiTaskPolicy(ABC):
@@ -94,7 +94,7 @@ class BaseMultiTaskPolicy(ABC):
         raise NotImplementedError
 
 
-class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
+class CODTMultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     """
     Policy object that implements actor critic
 
@@ -108,13 +108,13 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
     def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
                  n_envs_per_task: int, n_steps: int, reuse=False):
-        super(MultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
+        super(CODTMultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
         self.pdtype = None
         for task in self.tasks:
             if not isinstance(self.ac_space_dict[task], Discrete):
                 raise ValueError("Only discrete tasks are accepted")
-        dummy_ac_space = Discrete(config.max_action_space)
-        self.pdtype = make_proba_dist_type(dummy_ac_space)
+        max_ac_space = Discrete(config.max_action_space)
+        self.pdtype = make_proba_dist_type(max_ac_space)
         self.policy = None
         self.proba_distribution = None
         self.value_fn = None
@@ -179,14 +179,14 @@ class MultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         raise NotImplementedError
 
 
-class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
+class CODTMultiTaskFeedForwardA2CPolicy(CODTMultiTaskActorCriticPolicy):
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False, feature_extractor=shared_network):
-        super(MultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
+        super(CODTMultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
             extracted_features = feature_extractor(self.processed_obs)
-            ac_space_union = tf.nn.relu(linear(extracted_features, 'fc-union', n_hidden=config.max_action_space, init_scale=np.sqrt(2)))
-            self.pi_latent = vf_latent = ac_space_union
+            self.pi_latent = extracted_features
+            vf_latent = extracted_features
             self.value_fn = linear(vf_latent, 'vf', 1)
             proba_distribution, policy, q_value = self.pdtype.proba_distribution_from_latent(self.pi_latent, vf_latent, init_scale=0.01)
             self.proba_distribution = proba_distribution # distribution lehet vele sample neglog entropy a policy layeren
@@ -211,7 +211,7 @@ class MultiTaskFeedForwardA2CPolicy(MultiTaskActorCriticPolicy):
         return self.sess.run(self._value, {self.obs_ph: obs})
 
 
-class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
+class CODTMultiTaskLSTMA2CPolicy(CODTMultiTaskActorCriticPolicy):
     """
     Policy object that implements actor critic, using LSTMs.
 
@@ -229,7 +229,7 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
 
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False,
                  feature_extractor=shared_network, layer_norm=True):
-        super(MultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
+        super(CODTMultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
         self.n_lstm = config.n_lstm
         with tf.variable_scope("input", reuse=True):
             self.masks_ph = tf.placeholder(tf.float32, [None], name="masks_ph")  # mask (done t-1)
@@ -242,10 +242,9 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
             masks = batch_to_seq(self.masks_ph, self.n_steps) # n_steps x [n_env x 1]
             rnn_output, self.state_new = lstm(input_sequence, masks, self.states_ph, 'lstm1', n_hidden=self.n_lstm, layer_norm=layer_norm)  # n_steps x [n_env x n_lstm]
             latent_vector = seq_to_batch(rnn_output) # (n_steps * n_envs) x n_lstm
-            ac_space_union = tf.nn.relu(linear(latent_vector, 'fc-union', n_hidden=config.max_action_space, init_scale=np.sqrt(2)))
-            self.value_fn = linear(ac_space_union, 'vf', 1)
+            self.value_fn = linear(latent_vector, 'vf', 1)
             proba_distribution, policy, q_value = self.pdtype.\
-                proba_distribution_from_latent(ac_space_union, ac_space_union, init_scale=0.01)
+                proba_distribution_from_latent(latent_vector, latent_vector, init_scale=0.01)
             self.proba_distribution = proba_distribution  # distribution lehet vele sample neglog entropy a policy layeren
             self.policy = policy  # egy linear layer
             self.q_value = q_value  # linear layer
@@ -269,7 +268,7 @@ class MultiTaskLSTMA2CPolicy(MultiTaskActorCriticPolicy):
         return self.sess.run(self._value, {self.obs_ph: obs, self.states_ph: state, self.masks_ph: mask})
 
 
-class DiffOutputMultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
+class DODTMultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
     """
     Policy object that implements actor critic
 
@@ -283,7 +282,7 @@ class DiffOutputMultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
 
     def __init__(self, sess: tf.Session, tasks: list, ob_spaces: dict, ac_space_dict: dict,
                  n_envs_per_task: int, n_steps: int, reuse=False):
-        super(DiffOutputMultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
+        super(DODTMultiTaskActorCriticPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
         self.pdtype_dict = {}
         self.is_discrete_dict = {}
         for task in self.tasks:
@@ -355,9 +354,9 @@ class DiffOutputMultiTaskActorCriticPolicy(BaseMultiTaskPolicy):
         raise NotImplementedError
 
 
-class DiffOutputMultiTaskFeedForwardA2CPolicy(DiffOutputMultiTaskActorCriticPolicy):
+class DODTMultiTaskFeedForwardA2CPolicy(DODTMultiTaskActorCriticPolicy):
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False, feature_extractor=shared_network):
-        super(DiffOutputMultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
+        super(DODTMultiTaskFeedForwardA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=reuse)
 
         with tf.variable_scope("shared_model", reuse=reuse):
             extracted_features = feature_extractor(self.processed_obs)
@@ -390,7 +389,7 @@ class DiffOutputMultiTaskFeedForwardA2CPolicy(DiffOutputMultiTaskActorCriticPoli
         return self.sess.run(self._value[task], {self.obs_ph: obs})
 
 
-class DiffOutputMultiTaskLSTMA2CPolicy(DiffOutputMultiTaskActorCriticPolicy):
+class DODTMultiTaskLSTMA2CPolicy(DODTMultiTaskActorCriticPolicy):
     """
     Policy object that implements actor critic, using LSTMs.
 
@@ -408,7 +407,7 @@ class DiffOutputMultiTaskLSTMA2CPolicy(DiffOutputMultiTaskActorCriticPolicy):
 
     def __init__(self, sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse=False,
                  feature_extractor=shared_network, layer_norm=True):
-        super(DiffOutputMultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
+        super(DODTMultiTaskLSTMA2CPolicy, self).__init__(sess, tasks, ob_spaces, ac_space_dict, n_envs_per_task, n_steps, reuse)
         self.n_lstm = config.n_lstm
         with tf.variable_scope("input", reuse=True):
             self.masks_ph = tf.placeholder(tf.float32, [None], name="masks_ph")  # mask (done t-1)

@@ -73,7 +73,7 @@ seed = 3
 stdout_logging_frequency_in_train_steps = 100
 max_action_space = 18
 evaluation_frequency_in_episodes = 15
-frameskip = 3
+frameskip = 5
 logging_frequency_in_episodes = 5
 verbose = 1
 

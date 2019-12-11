@@ -200,6 +200,7 @@ class MultiTaskAgent:
 
     def save_model(self, avg_performance: float, harmonic_performance: float, json_params: dict):
         json_params.update({
+            "frameskip": config.frameskip,
             "total_episodes_learnt": int(self.total_episodes_learnt),
             "total_timesteps": int(self.total_timesteps),
             "total_training_updates": int(self.total_training_updates),

@@ -2,6 +2,7 @@ from stable_baselines.common.atari_wrappers import wrap_deepmind, NoopResetEnv
 from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines.common import set_global_seeds
 import gym
+import config
 
 def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
                    start_index=1, start_method=None):
@@ -22,7 +23,7 @@ def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
 
     def make_env(rank):
         def _thunk():
-            env = gym.make(env_id, frameskip=5)
+            env = gym.make(env_id, frameskip=config.frameskip)
             env = NoopResetEnv(env, noop_max=30)
             env.seed(seed + rank)
             return wrap_deepmind(env, **wrapper_kwargs)

@@ -34,6 +34,8 @@ class MultiTaskLearning:
             self.tau = params['tau']
             env_kwargs = params['env_kwargs']
             self.meta_n_steps = params['meta_n_steps']
+            self.best_harmonic_performance = params['best_qhm']
+            self.best_avg_performance = params['best_qam']
         else:
             self.tasks = tasks
             if algorithm == "EA4C" or algorithm == "A5C":
@@ -51,6 +53,8 @@ class MultiTaskLearning:
                 print("Number of episodes for estimating is overwritten by the number of cpus")
             self.lambda_ = config.meta_lambda
             self.meta_n_steps = config.meta_n_steps
+            self.best_avg_performance = 0.01
+            self.best_harmonic_performance = 0.01
             env_kwargs = {
                 'episode_life': True,
                 'clip_rewards': True,
@@ -59,10 +63,7 @@ class MultiTaskLearning:
             }
 
         self.ta = config.target_performances  # Target score in task Ti. This could be based on expert human performance or even published scores from other technical works
-
         self.verbose = verbose
-        self.best_avg_performance = 0.01
-        self.best_harmonic_performance = 0.01
 
         self.json_params = json_params
         self.json_params.update({
@@ -78,7 +79,9 @@ class MultiTaskLearning:
             "meta_n_steps": self.meta_n_steps,
             "evaluation_frequency_in_episodes": config.evaluation_frequency_in_episodes,
             "tau": self.tau,
-            'env_kwargs': env_kwargs
+            'env_kwargs': env_kwargs,
+            "best_qam": self.best_avg_performance,
+            "best_qhm": self.best_harmonic_performance,
         })
 
         self.amta = MultiTaskAgent(self.model_id, policy, self.tasks, n_steps, n_cpus, n_episodes, tensorboard_logging, logging, env_kwargs=env_kwargs)
@@ -106,6 +109,10 @@ class MultiTaskLearning:
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
+                        if avg_performance > self.best_avg_performance:
+                            self.json_params['best_qam'] = avg_performance
+                        if harmonic_performance > self.best_harmonic_performance:
+                            self.json_params['best_qhm'] = harmonic_performance
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
                     self.amta.flush_tbw()
@@ -138,6 +145,10 @@ class MultiTaskLearning:
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
+                        if avg_performance > self.best_avg_performance:
+                            self.json_params['best_qam'] = avg_performance
+                        if harmonic_performance > self.best_harmonic_performance:
+                            self.json_params['best_qhm'] = harmonic_performance
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
                     self.ma.save_model(self.amta.model.total_train_steps)

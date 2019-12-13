@@ -108,7 +108,7 @@ class MultiTaskLearning:
                     self.performance_logger.log(self.amta.total_timesteps)
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
-                    if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
+                    if avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance:
                         if avg_performance > self.best_avg_performance:
                             self.json_params['best_qam'] = avg_performance
                         if harmonic_performance > self.best_harmonic_performance:
@@ -144,7 +144,7 @@ class MultiTaskLearning:
                     self.performance_logger.log(self.amta.total_timesteps)
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
-                    if avg_performance > self.best_avg_performance or harmonic_performance > self.best_avg_performance:
+                    if avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance:
                         if avg_performance > self.best_avg_performance:
                             self.json_params['best_qam'] = avg_performance
                         if harmonic_performance > self.best_harmonic_performance:

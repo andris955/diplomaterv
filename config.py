@@ -13,11 +13,11 @@ MTI6 = ['Atlantis-v0', 'Amidar-v0', 'Breakout-v0', 'Bowling-v0', 'BeamRider-v0',
 MTI7 = ['SpaceInvaders-v0', 'Seaquest-v0', 'Asterix-v0', 'Alien-v0', 'Assault-v0', 'BankHeist-v0', 'CrazyClimber-v0', 'DemonAttack-v0', 'Gopher-v0', 'NameThisGame-v0', 'StarGunner-v0', 'Tutankham-v0', 'Amidar-v0', 'ChopperCommand-v0', 'Breakout-v0', 'BeamRider-v0', 'Bowling-v0', 'Centipede-v0', 'Krull-v0', 'Kangaroo-v0', 'Phoenix-v0']
 
 MTIC1 = ['SpaceInvaders-v0', 'Seaquest-v0', 'CrazyClimber-v0']  # különböző, de jó
-
+#act            6                18              9
 MTIC2 = ['SpaceInvaders-v0', 'Assault-v0', 'DemonAttack-v0']  # hasonló (1D-ben mozog és lő)
-
+#               6               7               6
 MTIC3 = ['Seaquest-v0', 'StarGunner-v0', 'ChopperCommand-v0']  # hasonló (2D-ben mozog és lő), de rossz
-
+#           18              18                  18
 
 target_performances = {
     'SpaceInvaders-v0': 1200,

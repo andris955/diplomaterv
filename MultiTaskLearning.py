@@ -109,17 +109,15 @@ class MultiTaskLearning:
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance:
-                        if avg_performance > self.best_avg_performance:
-                            self.json_params['best_qam'] = avg_performance
-                        if harmonic_performance > self.best_harmonic_performance:
-                            self.json_params['best_qhm'] = harmonic_performance
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
                     self.amta.flush_tbw()
                     if avg_performance > self.best_avg_performance:
                         self.best_avg_performance = avg_performance
+                        self.json_params['best_qam'] = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
+                        self.json_params['best_qhm'] = harmonic_performance
                     self.a = self.performance_logger.scores
                     for i in range(len(self.tasks)):
                         self.m[i] = max(self.ta[self.tasks[i]] - self.a[i], 0) / (self.ta[self.tasks[i]] * self.tau)  # the less the better
@@ -145,18 +143,16 @@ class MultiTaskLearning:
                     if self.amta.total_episodes_learnt % (config.evaluation_frequency_in_episodes*5) == 0:
                         self.performance_logger.dump()
                     if avg_performance > self.best_avg_performance or harmonic_performance > self.best_harmonic_performance:
-                        if avg_performance > self.best_avg_performance:
-                            self.json_params['best_qam'] = avg_performance
-                        if harmonic_performance > self.best_harmonic_performance:
-                            self.json_params['best_qhm'] = harmonic_performance
                         self.amta.save_model(avg_performance, harmonic_performance, self.json_params)
                         print("Model saved")
                     self.ma.save_model(self.amta.model.total_train_steps)
                     self.amta.flush_tbw()
                     if avg_performance > self.best_avg_performance:
                         self.best_avg_performance = avg_performance
+                        self.json_params['best_qam'] = avg_performance
                     if harmonic_performance > self.best_harmonic_performance:
                         self.best_harmonic_performance = harmonic_performance
+                        self.json_params['best_qhm'] = harmonic_performance
                     s_avg_norm = list(self.performance_logger.performance)
                     s_avg_norm.sort()
                     s_min_l = s_avg_norm[0:self.l]

@@ -7,7 +7,7 @@
 
 # Installation
 ### Prerequisites
-Baselines requires python3 (>=3.5) with the development headers. You’ll also need system packages CMake, OpenMPI and zlib. Those can be installed as follows
+Baselines requires python3 (>=3.6) with the development headers. You’ll also need system packages CMake, OpenMPI and zlib. Those can be installed as follows
 ### Ubuntu
 ```bash
 sudo apt-get update && sudo apt-get install cmake libopenmpi-dev python3-dev zlib1g-dev

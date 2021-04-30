@@ -73,6 +73,6 @@ termcolor==1.1.0
 tqdm==4.31.1
 typepy==0.4.0
 update==0.0.1
-urllib3==1.25.6
+urllib3==1.25.8
 Werkzeug==0.16.0
 zmq==0.0.0
